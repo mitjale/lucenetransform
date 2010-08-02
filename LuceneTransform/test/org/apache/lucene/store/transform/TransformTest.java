@@ -2,12 +2,13 @@
  * To change this template, choose Tools | Templates
  * and open the template in the editor.
  */
-
 package org.apache.lucene.store.transform;
 
 import java.io.File;
 import java.io.IOException;
 import java.security.GeneralSecurityException;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.zip.Deflater;
 import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.analysis.standard.StandardAnalyzer;
@@ -44,8 +45,10 @@ import static org.junit.Assert.*;
 public class TransformTest {
 
     private final int count = 10000;
+    private TimeCollector times;
 
     public TransformTest() {
+        times = new TimeCollector();
     }
 
     @BeforeClass
@@ -58,24 +61,30 @@ public class TransformTest {
     }
 
     @Before
-    public void setUp() {        
+    public void setUp() {
     }
 
     @After
     public void tearDown() {
     }
 
-    private void fillDoc(Document doc, int i ) {
+    private void fillDoc(Document doc, int i) {
         doc.add(new Field("id", String.valueOf(i), Field.Store.YES, Field.Index.NOT_ANALYZED));
-        doc.add(new Field("content", "Long same words to get better result "+String.valueOf(i), Field.Store.YES, Field.Index.ANALYZED));
+        doc.add(new Field("content", "Long same words to get better result " + String.valueOf(i), Field.Store.YES, Field.Index.ANALYZED));
 
     }
 
-    private void TestLucene(Directory dir, int count, String testInfo) throws IOException {
+    private void logTime(String method, String ops, long time) {
+        times.addMesurement(method, ops, time);
+    }
+
+    private void TestLucene(Directory dir, int count, String testInfo, File fdir) throws IOException {
         long initTime = System.currentTimeMillis();
         Analyzer anal = new StandardAnalyzer(Version.LUCENE_30);
         IndexWriter writer = new IndexWriter(dir, anal, IndexWriter.MaxFieldLength.UNLIMITED);
-        for (int i = 0; i<count; i++) {
+        logTime(testInfo, "WriterOpen(ms)", System.currentTimeMillis() - initTime);
+        initTime = System.currentTimeMillis();
+        for (int i = 0; i < count; i++) {
             Document doc = new Document();
             fillDoc(doc, i);
             writer.addDocument(doc);
@@ -83,7 +92,7 @@ public class TransformTest {
         }
         //make split for optimization test
         writer.commit();
-        for (int i = 0; i<count; i++) {
+        for (int i = 0; i < count; i++) {
             Document doc = new Document();
             fillDoc(doc, i);
             writer.addDocument(doc);
@@ -91,102 +100,134 @@ public class TransformTest {
 
         }
         writer.commit();
-        System.out.println("Indexing "+testInfo+":"+(System.currentTimeMillis()-initTime)+" ms");
+        logTime(testInfo, "Indexing(ms)", System.currentTimeMillis() - initTime);
         initTime = System.currentTimeMillis();
         writer.optimize();
-        System.out.println("Optimizing "+testInfo+":"+(System.currentTimeMillis()-initTime)+" ms");
-        initTime = System.currentTimeMillis();        
+        logTime(testInfo, "Optimization(ms)", System.currentTimeMillis() - initTime);
+        initTime = System.currentTimeMillis();
         writer.close();
-        System.out.println("Closing "+testInfo+":"+(System.currentTimeMillis()-initTime)+" ms");
+        logTime(testInfo, "Closing(ms)", System.currentTimeMillis() - initTime);
 
         initTime = System.currentTimeMillis();
         IndexReader reader = IndexReader.open(dir, true);
+        logTime(testInfo, "ReaderOpen(ms)", System.currentTimeMillis() - initTime);
+        initTime = System.currentTimeMillis();
         Searcher searcher = new IndexSearcher(reader);
-        for (int i = 0; i<count; i++) {
-            TopDocs docs = searcher.search(new TermQuery(new Term("id",String.valueOf(i))),10);
-            assertTrue(docs.totalHits==2);
+        TopDocs sdocs = searcher.search(new TermQuery(new Term("id", String.valueOf(count / 2))), 10);
+        logTime(testInfo, "Single search(ms)", System.currentTimeMillis() - initTime);
+        assertTrue(sdocs.totalHits == 2);
+        initTime = System.currentTimeMillis();
+        for (int i = 0; i < count; i++) {
+            TopDocs docs = searcher.search(new TermQuery(new Term("id", String.valueOf(i))), 10);
+            assertTrue(docs.totalHits == 2);
             Document doc1 = reader.document(docs.scoreDocs[0].doc);
             Document doc2 = reader.document(docs.scoreDocs[1].doc);
         }
+        logTime(testInfo, "Search(ms)", System.currentTimeMillis() - initTime);
+        initTime = System.currentTimeMillis();
         reader.close();
-        System.out.println("Query "+testInfo+":"+(System.currentTimeMillis()-initTime)+" ms");
+        logTime(testInfo, "ReaderClose(ms)", System.currentTimeMillis() - initTime);
+        dir.close();
+        long totals = du(fdir);        
+        times.addMesurement(testInfo, "Size(bytes)",totals );
 
     }
 
     // TODO add test methods here.
     // The methods must be annotated with annotation @Test. For example:
     //
-     @Test
-     public void lucene() throws IOException {
-         
-         Directory dir = FSDirectory.open(new File("data/test/lucene"));
-         TestLucene(dir, count, "lucene");
-     }
-     @Test
-     public void luceneNull() throws IOException {
+    @Test
+    public void lucene() throws IOException {
+        final File ldir = new File("data/test/lucene");
+        Directory dir = FSDirectory.open(ldir);
+        TestLucene(dir, count, "lucene", ldir);
+    }
 
-         Directory dir = FSDirectory.open(new File("data/test/nlucene"));
-         Directory ndir = new TransformedDirectory(dir, new NullTransformer(), new NullTransformer());
-         TestLucene(ndir, count, "lucene null");
-     }
+    @Test
+    public void luceneNull() throws IOException {
+        final File ldir = new File("data/test/nlucene");
+        Directory dir = FSDirectory.open(ldir);
+        Directory ndir = new TransformedDirectory(dir, new NullTransformer(), new NullTransformer());
+        TestLucene(ndir, count, "lucene null", ldir);
+    }
 
-     @Test
-     public void compressed() throws IOException {
-         Directory bdir = FSDirectory.open(new File("data/test/clucene"));
-         Directory cdir = new CompressedIndexDirectory(bdir);
-         TestLucene(cdir, count, "compressed");
-     }
+    @Test
+    public void compressed() throws IOException {
+        final File dir = new File("data/test/clucene");
+        Directory bdir = FSDirectory.open(dir);
+        Directory cdir = new CompressedIndexDirectory(bdir);
+        TestLucene(cdir, count, "compressed", dir);
+    }
 
-     @Test
-     public void encrypted() throws IOException, GeneralSecurityException {
-         Directory bdir = FSDirectory.open(new File("data/test/elucene"));
-         byte[] salt = new byte[16];
-         String password = "lucenetransform";
-         DataEncryptor enc = new DataEncryptor("AES", password, salt, 128,false);
-         DataDecryptor dec = new DataDecryptor(password, salt,false);
-         Directory cdir = new TransformedDirectory(bdir, enc, dec);
-         TestLucene(cdir, count, "AES encrypted");
-     }
+    @Test
+    public void encrypted() throws IOException, GeneralSecurityException {
+        final File dir = new File("data/test/elucene");
+        Directory bdir = FSDirectory.open(dir);
+        byte[] salt = new byte[16];
+        String password = "lucenetransform";
+        DataEncryptor enc = new DataEncryptor("AES", password, salt, 128, false);
+        DataDecryptor dec = new DataDecryptor(password, salt, false);
+        Directory cdir = new TransformedDirectory(bdir, enc, dec);
+        TestLucene(cdir, count, "AES encrypted", dir);
+    }
 
-     @Test
-     public void encryptedCBC() throws IOException, GeneralSecurityException {
-         Directory bdir = FSDirectory.open(new File("data/test/eelucene"));
-         byte[] salt = new byte[16];
-         String password = "lucenetransform";
-         DataEncryptor enc = new DataEncryptor("AES/CBC/PKCS5Padding", password, salt, 128,false);
-         DataDecryptor dec = new DataDecryptor(password, salt,false);
-         Directory cdir = new TransformedDirectory(bdir, enc, dec);
-         TestLucene(cdir, count, "AES CBC encrypted");
-     }
-     @Test
-     public void compressedEncryptedCBC() throws IOException, GeneralSecurityException {
-         Directory bdir = FSDirectory.open(new File("data/test/celucene"));
-         byte[] salt = new byte[16];
-         String password = "lucenetransform";
-         DataEncryptor enc = new DataEncryptor("AES/CBC/PKCS5Padding", password, salt, 128,false);
-         DataDecryptor dec = new DataDecryptor(password, salt,false);
+      @Test
+    public void encryptedCBC() throws IOException, GeneralSecurityException {
+        final File dir = new File("data/test/eelucene");
+        Directory bdir = FSDirectory.open(dir);
+        byte[] salt = new byte[16];
+        String password = "lucenetransform";
+        DataEncryptor enc = new DataEncryptor("AES/CBC/PKCS5Padding", password, salt, 128, false);
+        DataDecryptor dec = new DataDecryptor(password, salt, false);
+        Directory cdir = new TransformedDirectory(bdir, enc, dec);
+        TestLucene(cdir, count, "AES CBC encrypted", dir);
+    }
 
-         StorePipeTransformer st = new StorePipeTransformer(new DeflateDataTransformer(Deflater.BEST_COMPRESSION, 1), enc);
-         ReadPipeTransformer rt = new ReadPipeTransformer(dec, new InflateDataTransformer());
+    @Test
+    public void compressedEncryptedCBC() throws IOException, GeneralSecurityException {
+        final File dir = new File("data/test/celucene");
+        Directory bdir = FSDirectory.open(dir);
+        byte[] salt = new byte[16];
+        String password = "lucenetransform";
+        DataEncryptor enc = new DataEncryptor("AES/CBC/PKCS5Padding", password, salt, 128, false);
+        DataDecryptor dec = new DataDecryptor(password, salt, false);
 
-         Directory cdir = new TransformedDirectory(bdir, st, rt);
-         TestLucene(cdir, count, "Compressed AES CBC encrypted");
-     }
+        StorePipeTransformer st = new StorePipeTransformer(new DeflateDataTransformer(Deflater.BEST_COMPRESSION, 1), enc);
+        ReadPipeTransformer rt = new ReadPipeTransformer(dec, new InflateDataTransformer());
 
-     public  static void delTree(File root) {
-         File files[] = root.listFiles();
-         for (File f : files) {
-             if (f.isDirectory()) {
-                 delTree(f);
-             }
-             f.delete();
-         }
-     }
+        Directory cdir = new TransformedDirectory(bdir, st, rt);
+        TestLucene(cdir, count, "Compressed AES CBC encrypted", dir);
+    }
 
-     public static void main(String args[]) throws IOException {
+    public static void delTree(File root) {
+        File files[] = root.listFiles();
+        if (files != null) {
+            for (File f : files) {
+                if (f.isDirectory()) {
+                    delTree(f);
+                }
+                f.delete();
+            }
+        }
+    }
 
-         TransformTest tt = new TransformTest();
-         tt.luceneNull();
-     }
+    public static long du(File root) {
+        long size = 0;
+        File files[] = root.listFiles();
+        if (files != null) {
+            for (File f : files) {
+                if (f.isDirectory()) {
+                    size += du(f);
+                }
+                if (f.isFile()) {
+                    size += f.length();                    
+                }
+            }
+        }
+        return size;
+    }
 
+    public TimeCollector getStatistics() {
+        return times;
+    }
 }

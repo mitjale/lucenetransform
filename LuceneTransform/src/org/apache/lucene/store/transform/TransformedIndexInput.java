@@ -378,15 +378,15 @@ public class TransformedIndexInput extends IndexInput {
                 return;
             }
         }
-        long currentPos = input.getFilePointer();
+        final long currentPos = input.getFilePointer();
         if (hasDeflatedPosition) {
-            long inflatedPos = input.readVLong();
+            final long inflatedPos = input.readVLong();
             if (bufferPos != inflatedPos) {
                 throw new IOException("Invalid compression chunk location " + bufferPos + "!=" + inflatedPos);
             }
         }
-        long chunkCRC = input.readVLong();
-        int compressed = input.readVInt();
+        final long chunkCRC = input.readVLong();
+        final int compressed = input.readVInt();
         bufsize = input.readVInt();
         //  System.out.println("Decompressing " + input + " at " + input.getFilePointer()+" size="+bufsize);
 
@@ -397,6 +397,7 @@ public class TransformedIndexInput extends IndexInput {
             buffer = new byte[bufsize];
         }
         //System.out.println("Reading "+name+" cp="+currentPos+" dp="+bufferPos+" len="+bufsize);
+        // we are at current position ie. buffer allready contains data
         if (bufferDeflatedPos == currentPos) {
             input.seek(input.getFilePointer() + compressed);
         } else {
@@ -482,10 +483,10 @@ public class TransformedIndexInput extends IndexInput {
     public Object clone() {
         TransformedIndexInput clone = (TransformedIndexInput) super.clone();
         clone.input = (IndexInput) input.clone();
-        clone.buffer = buffer.clone();
-        clone.readBuffer = readBuffer.clone();
-        clone.inflater = (ReadDataTransformer) inflater.copy();
-        clone.cache = cache;
+        clone.buffer = new byte[bufsize];
+        System.arraycopy(buffer, 0, clone.buffer, 0, bufsize);
+        clone.readBuffer = new byte[512];
+        clone.inflater = (ReadDataTransformer) inflater.copy();        
         return clone;
     }
 
