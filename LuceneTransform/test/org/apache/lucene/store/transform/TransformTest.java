@@ -82,6 +82,7 @@ public class TransformTest {
         long initTime = System.currentTimeMillis();
         Analyzer anal = new StandardAnalyzer(Version.LUCENE_30);
         IndexWriter writer = new IndexWriter(dir, anal, IndexWriter.MaxFieldLength.UNLIMITED);
+        //writer.setUseCompoundFile(false);
         logTime(testInfo, "WriterOpen(ms)", System.currentTimeMillis() - initTime);
         initTime = System.currentTimeMillis();
         for (int i = 0; i < count; i++) {

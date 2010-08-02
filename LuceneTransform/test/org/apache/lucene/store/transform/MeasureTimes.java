@@ -15,7 +15,7 @@ public class MeasureTimes {
       public static void main(String args[]) throws IOException, Exception {
 
          TransformTest tt = new TransformTest();
-         for (int i = 0; i<110; i++) {
+         for (int i = 0; i<31; i++) {
              System.out.println("Run "+i);
             tt.setUpClass();
             tt.lucene();
@@ -27,6 +27,8 @@ public class MeasureTimes {
             if (i==0) {
                 // clear statistics to prevent startup influence
                 tt.getStatistics().clear();
+            } else {
+                System.out.println(tt.getStatistics());
             }
          }
          System.out.println(tt.getStatistics());

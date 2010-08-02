@@ -42,7 +42,7 @@ public class InflateDataTransformer implements ReadDataTransformer {
 
 
 
-    public int transform(byte[] inBytes, int inOffset, int inLength, byte[] outBytes, int maxOutLength) throws IOException {
+    public synchronized int transform(byte[] inBytes, int inOffset, int inLength, byte[] outBytes, int maxOutLength) throws IOException {
         // just for sematically corect
         // and if deflated and inflated size are equal (there was no trasform)
         if (inflateCount<=0 || inLength == maxOutLength) {
@@ -66,7 +66,8 @@ public class InflateDataTransformer implements ReadDataTransformer {
     }
 
     public DataTransformer copy() {
-        return new InflateDataTransformer(inflateCount);
+        //return new InflateDataTransformer(inflateCount);
+        return this;
     }
 
     public void setConfig(byte[] pData) {

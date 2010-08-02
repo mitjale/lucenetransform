@@ -108,6 +108,7 @@ public class TransformedIndexInput extends IndexInput {
     private DecompressionChunkCache cache;
     private int overwrittenChunks[];
     private int firstOverwrittenPos[];
+    private final Object READ_BUFFER_LOCK = new Object();
 
     public TransformedIndexInput(String pName, IndexInput openInput, ReadDataTransformer inflater, DecompressionChunkCache cache) throws IOException {
         this.input = openInput;
@@ -139,6 +140,8 @@ public class TransformedIndexInput extends IndexInput {
             chunkPos = 0;
             bufferOffset = 0;
             bufsize = 0;
+        } else {
+            throw new IOException("Invalid chunked file");
         }
 
         buildOverwritten();
@@ -390,9 +393,6 @@ public class TransformedIndexInput extends IndexInput {
         bufsize = input.readVInt();
         //  System.out.println("Decompressing " + input + " at " + input.getFilePointer()+" size="+bufsize);
 
-        if (compressed > readBuffer.length) {
-            readBuffer = new byte[compressed];
-        }
         if (bufsize > buffer.length) {
             buffer = new byte[bufsize];
         }
@@ -415,8 +415,14 @@ public class TransformedIndexInput extends IndexInput {
                 input.seek(input.getFilePointer() + compressed);
             } else {
                 //           System.out.println("Decompress at " + currentPos + " " + cache);
-                input.readBytes(readBuffer, 0, compressed);
-                int lcnt = inflater.transform(readBuffer, 0, compressed, buffer, bufsize);
+                int lcnt;
+                synchronized (READ_BUFFER_LOCK) {
+                    if (compressed > readBuffer.length) {
+                        readBuffer = new byte[compressed];
+                    }
+                    input.readBytes(readBuffer, 0, compressed);
+                    lcnt = inflater.transform(readBuffer, 0, compressed, buffer, bufsize);
+                }
                 // did not transform
                 if (lcnt < 0) {
                     lcnt = compressed;
@@ -483,10 +489,10 @@ public class TransformedIndexInput extends IndexInput {
     public Object clone() {
         TransformedIndexInput clone = (TransformedIndexInput) super.clone();
         clone.input = (IndexInput) input.clone();
-        clone.buffer = new byte[bufsize];
+        clone.buffer = new byte[buffer.length];
         System.arraycopy(buffer, 0, clone.buffer, 0, bufsize);
-        clone.readBuffer = new byte[512];
-        clone.inflater = (ReadDataTransformer) inflater.copy();        
+        // readBuffer is shared with all clones
+        clone.inflater = (ReadDataTransformer) inflater.copy();
         return clone;
     }
 
