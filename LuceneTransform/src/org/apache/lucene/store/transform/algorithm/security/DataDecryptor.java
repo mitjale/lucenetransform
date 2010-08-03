@@ -66,7 +66,7 @@ public class DataDecryptor implements ReadDataTransformer {
 
     }
 
-    public void setConfig(byte[] pData) throws IOException {
+    public  synchronized void setConfig(byte[] pData) throws IOException {
         IndexInput input = new ByteIndexInput(pData);
         algorithm = input.readString();
         keyLength = input.readVInt();
@@ -92,6 +92,8 @@ public class DataDecryptor implements ReadDataTransformer {
             try {
                 if (algorithm != null) {
                     dec.initCipher();
+                } else {
+                    throw new IllegalStateException("Cipher algorithm not specified");
                 }
             } catch (GeneralSecurityException ex) {
                 throw new RuntimeException(ex);

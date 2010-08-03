@@ -44,8 +44,12 @@ import static org.junit.Assert.*;
  */
 public class TransformTest {
 
-    private final int count = 10000;
+    private final int count = 1000000;
+    private final int searchCount = 10000;
     private TimeCollector times;
+
+    private int chunkSize = 128*1024;
+    private boolean directStore = true;
 
     public TransformTest() {
         times = new TimeCollector();
@@ -68,11 +72,22 @@ public class TransformTest {
     public void tearDown() {
     }
 
-    private void fillDoc(Document doc, int i) {
-        doc.add(new Field("id", String.valueOf(i), Field.Store.YES, Field.Index.NOT_ANALYZED));
-        doc.add(new Field("content", "Long same words to get better result " + String.valueOf(i), Field.Store.YES, Field.Index.ANALYZED));
-
+    public int getChunkSize() {
+        return chunkSize;
     }
+
+    public void setChunkSize(int chunkSize) {
+        this.chunkSize = chunkSize;
+    }
+
+    public boolean isDirectStore() {
+        return directStore;
+    }
+
+    public void setDirectStore(boolean directStore) {
+        this.directStore = directStore;
+    }
+
 
     private void logTime(String method, String ops, long time) {
         times.addMesurement(method, ops, time);
@@ -85,22 +100,23 @@ public class TransformTest {
         //writer.setUseCompoundFile(false);
         logTime(testInfo, "WriterOpen(ms)", System.currentTimeMillis() - initTime);
         initTime = System.currentTimeMillis();
-        for (int i = 0; i < count; i++) {
-            Document doc = new Document();
-            fillDoc(doc, i);
-            writer.addDocument(doc);
+        Document doc = new Document();
+        Field id = new Field("id", "", Field.Store.YES, Field.Index.NOT_ANALYZED);     
+        Field content = new Field("content", "", Field.Store.YES, Field.Index.ANALYZED);
+        doc.add(id);
+        doc.add(content);
+        for (int j = 0; j < 2; j++) {
 
+            for (int i = 0; i < count; i++) {
+                id.setValue(String.valueOf(i));
+                content.setValue("Long same words to get better result " + String.valueOf(i));
+                writer.addDocument(doc);
+
+            }
+
+            //make split for optimization test
+            writer.commit();
         }
-        //make split for optimization test
-        writer.commit();
-        for (int i = 0; i < count; i++) {
-            Document doc = new Document();
-            fillDoc(doc, i);
-            writer.addDocument(doc);
-
-
-        }
-        writer.commit();
         logTime(testInfo, "Indexing(ms)", System.currentTimeMillis() - initTime);
         initTime = System.currentTimeMillis();
         writer.optimize();
@@ -118,7 +134,7 @@ public class TransformTest {
         logTime(testInfo, "Single search(ms)", System.currentTimeMillis() - initTime);
         assertTrue(sdocs.totalHits == 2);
         initTime = System.currentTimeMillis();
-        for (int i = 0; i < count; i++) {
+        for (int i = 0; i < searchCount; i++) {
             TopDocs docs = searcher.search(new TermQuery(new Term("id", String.valueOf(i))), 10);
             assertTrue(docs.totalHits == 2);
             Document doc1 = reader.document(docs.scoreDocs[0].doc);
@@ -129,8 +145,8 @@ public class TransformTest {
         reader.close();
         logTime(testInfo, "ReaderClose(ms)", System.currentTimeMillis() - initTime);
         dir.close();
-        long totals = du(fdir);        
-        times.addMesurement(testInfo, "Size(bytes)",totals );
+        long totals = du(fdir);
+        times.addMesurement(testInfo, "Size(bytes)", totals);
 
     }
 
@@ -148,15 +164,16 @@ public class TransformTest {
     public void luceneNull() throws IOException {
         final File ldir = new File("data/test/nlucene");
         Directory dir = FSDirectory.open(ldir);
-        Directory ndir = new TransformedDirectory(dir, new NullTransformer(), new NullTransformer());
+        Directory ndir = new TransformedDirectory(dir, chunkSize, new NullTransformer(), new NullTransformer(), directStore);
         TestLucene(ndir, count, "lucene null", ldir);
     }
 
-    @Test
+      @Test
     public void compressed() throws IOException {
         final File dir = new File("data/test/clucene");
         Directory bdir = FSDirectory.open(dir);
-        Directory cdir = new CompressedIndexDirectory(bdir);
+        //Directory cdir = new CompressedIndexDirectory(bdir);
+        Directory cdir = new TransformedDirectory(bdir, chunkSize, new DeflateDataTransformer(), new InflateDataTransformer(), directStore);
         TestLucene(cdir, count, "compressed", dir);
     }
 
@@ -168,11 +185,11 @@ public class TransformTest {
         String password = "lucenetransform";
         DataEncryptor enc = new DataEncryptor("AES", password, salt, 128, false);
         DataDecryptor dec = new DataDecryptor(password, salt, false);
-        Directory cdir = new TransformedDirectory(bdir, enc, dec);
+        Directory cdir = new TransformedDirectory(bdir, chunkSize, enc, dec, directStore);
         TestLucene(cdir, count, "AES encrypted", dir);
     }
 
-      @Test
+    @Test
     public void encryptedCBC() throws IOException, GeneralSecurityException {
         final File dir = new File("data/test/eelucene");
         Directory bdir = FSDirectory.open(dir);
@@ -180,7 +197,7 @@ public class TransformTest {
         String password = "lucenetransform";
         DataEncryptor enc = new DataEncryptor("AES/CBC/PKCS5Padding", password, salt, 128, false);
         DataDecryptor dec = new DataDecryptor(password, salt, false);
-        Directory cdir = new TransformedDirectory(bdir, enc, dec);
+        Directory cdir = new TransformedDirectory(bdir,chunkSize, enc, dec, directStore);
         TestLucene(cdir, count, "AES CBC encrypted", dir);
     }
 
@@ -196,7 +213,7 @@ public class TransformTest {
         StorePipeTransformer st = new StorePipeTransformer(new DeflateDataTransformer(Deflater.BEST_COMPRESSION, 1), enc);
         ReadPipeTransformer rt = new ReadPipeTransformer(dec, new InflateDataTransformer());
 
-        Directory cdir = new TransformedDirectory(bdir, st, rt);
+        Directory cdir = new TransformedDirectory(bdir, chunkSize, st, rt,directStore);
         TestLucene(cdir, count, "Compressed AES CBC encrypted", dir);
     }
 
@@ -221,7 +238,7 @@ public class TransformTest {
                     size += du(f);
                 }
                 if (f.isFile()) {
-                    size += f.length();                    
+                    size += f.length();
                 }
             }
         }
