@@ -44,11 +44,10 @@ import static org.junit.Assert.*;
  */
 public class TransformTest {
 
-    private final int count = 1000000;
+    private final int count = 10000;
     private final int searchCount = 10000;
     private TimeCollector times;
-
-    private int chunkSize = 128*1024;
+    private int chunkSize = 128 * 1024;
     private boolean directStore = true;
 
     public TransformTest() {
@@ -57,7 +56,6 @@ public class TransformTest {
 
     @BeforeClass
     public static void setUpClass() throws Exception {
-        delTree(new File("data/test"));
     }
 
     @AfterClass
@@ -65,7 +63,11 @@ public class TransformTest {
     }
 
     @Before
-    public void setUp() {
+    public void setUp() throws InterruptedException {
+        delTree(new File("data/test"));
+        //allow OS FS layer to cleanup
+
+        //Thread.sleep(10000);
     }
 
     @After
@@ -88,7 +90,6 @@ public class TransformTest {
         this.directStore = directStore;
     }
 
-
     private void logTime(String method, String ops, long time) {
         times.addMesurement(method, ops, time);
     }
@@ -101,7 +102,7 @@ public class TransformTest {
         logTime(testInfo, "WriterOpen(ms)", System.currentTimeMillis() - initTime);
         initTime = System.currentTimeMillis();
         Document doc = new Document();
-        Field id = new Field("id", "", Field.Store.YES, Field.Index.NOT_ANALYZED);     
+        Field id = new Field("id", "", Field.Store.YES, Field.Index.NOT_ANALYZED);
         Field content = new Field("content", "", Field.Store.YES, Field.Index.ANALYZED);
         doc.add(id);
         doc.add(content);
@@ -168,7 +169,7 @@ public class TransformTest {
         TestLucene(ndir, count, "lucene null", ldir);
     }
 
-      @Test
+    @Test
     public void compressed() throws IOException {
         final File dir = new File("data/test/clucene");
         Directory bdir = FSDirectory.open(dir);
@@ -197,7 +198,7 @@ public class TransformTest {
         String password = "lucenetransform";
         DataEncryptor enc = new DataEncryptor("AES/CBC/PKCS5Padding", password, salt, 128, false);
         DataDecryptor dec = new DataDecryptor(password, salt, false);
-        Directory cdir = new TransformedDirectory(bdir,chunkSize, enc, dec, directStore);
+        Directory cdir = new TransformedDirectory(bdir, chunkSize, enc, dec, directStore);
         TestLucene(cdir, count, "AES CBC encrypted", dir);
     }
 
@@ -213,7 +214,7 @@ public class TransformTest {
         StorePipeTransformer st = new StorePipeTransformer(new DeflateDataTransformer(Deflater.BEST_COMPRESSION, 1), enc);
         ReadPipeTransformer rt = new ReadPipeTransformer(dec, new InflateDataTransformer());
 
-        Directory cdir = new TransformedDirectory(bdir, chunkSize, st, rt,directStore);
+        Directory cdir = new TransformedDirectory(bdir, chunkSize, st, rt, directStore);
         TestLucene(cdir, count, "Compressed AES CBC encrypted", dir);
     }
 

@@ -35,6 +35,50 @@ import org.apache.lucene.store.transform.algorithm.ReadDataTransformer;
  */
 public class TransformedIndexInput extends IndexInput {
 
+    /** allocation is key performance problem, therefore every malloc we can
+     *  avoid is ok. MemoryCache is shared instance between original and all clones.
+     */
+    private static class MemoryCache {
+
+        /** make short list of last allocations */
+        SharedBuffer[] buffers = new SharedBuffer[10];
+
+        synchronized SharedBuffer newBuffer(int size) {
+
+            for (int i = 0; i < buffers.length; i++) {
+                if (buffers[i] != null && buffers[i].data.length >= size) {
+                    SharedBuffer result = buffers[i];
+                    buffers[i] = null;
+                    return result;
+                }
+            }
+            return new SharedBuffer(size);
+        }
+
+        synchronized void release(SharedBuffer buffer) {
+            buffer.refCount--;
+            if (buffer.refCount == 0) {
+                for (int i = 0; i < buffers.length; i++) {
+                    if (buffers[i] == null) {
+                        buffers[i] = buffer;
+                        buffer.refCount = 1;
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    private static class SharedBuffer {
+
+        byte[] data;
+        volatile int refCount;
+
+        public SharedBuffer(int size) {
+            data = new byte[size];
+            refCount = 1;
+        }
+    }
     /** compressed input
      *
      */
@@ -70,7 +114,7 @@ public class TransformedIndexInput extends IndexInput {
     /** decompressed data buffer
      *
      */
-    private byte[] buffer;
+    private SharedBuffer buffer;
     /** buffer to read compressed data chunks
      *
      */
@@ -99,6 +143,7 @@ public class TransformedIndexInput extends IndexInput {
      *
      */
     private CRC32 crc;
+    private MemoryCache memCache;
     private String name;
     private DecompressionChunkCache cache;
     private int overwrittenChunks[];
@@ -116,8 +161,9 @@ public class TransformedIndexInput extends IndexInput {
         this.cache = cache;
         bufferDeflatedPos = -1;
         this.inflater = inflater;
-        buffer = new byte[512];
+        buffer = new SharedBuffer(512);
         readBuffer = new byte[512];
+        this.memCache = new MemoryCache();
 
         if (input.length() >= 16) {
             length = input.readLong();
@@ -167,7 +213,8 @@ public class TransformedIndexInput extends IndexInput {
                 // later in the file. It can be called recursively
                 if (bufsize < obufsize) {
                     // copy all data before recursive call
-                    byte[] original = buffer.clone();
+                    SharedBuffer original = buffer;
+                    buffer = memCache.newBuffer(buffer.data.length);
                     long lpos = input.getFilePointer();
                     long obufferPos = bufferPos;
                     int overOffset = bufsize;
@@ -184,13 +231,15 @@ public class TransformedIndexInput extends IndexInput {
                     // combine results to single buffer, as it is result of readDecompressImp
                     int nbufsize = Math.max(obufsize, overOffset + bufsize);
                     byte[] result = new byte[nbufsize];
-                    System.arraycopy(original, 0, result, 0, obufsize);
-                    System.arraycopy(buffer, 0, result, overOffset, bufsize);
+                    System.arraycopy(original.data, 0, result, 0, obufsize);
+                    System.arraycopy(buffer.data, 0, result, overOffset, bufsize);
                     bufsize = nbufsize;
-                    buffer = result;
+                    buffer.data = result;
                     bufferPos = obufferPos;
                     bufferOffset = origBuffOffset;
                     chunkPos = overChunkPos;
+                    memCache.release(original);
+
 
                 }
             }
@@ -213,9 +262,9 @@ public class TransformedIndexInput extends IndexInput {
             endOfFilePosition = input.readLong();
             input.seek(endOfFilePosition);
             readDecompressImp(false);
-            IndexInput in = new ByteIndexInput(buffer);
+            IndexInput in = new ByteIndexInput(buffer.data);
             // if chunk directory is large, buffers are too big, so reset them
-            buffer = new byte[512];
+            buffer.data = new byte[512];
             readBuffer = new byte[512];
             int entries = in.readVInt();
             inflatedPositions = new long[entries];
@@ -319,7 +368,7 @@ public class TransformedIndexInput extends IndexInput {
         bufferPos += bufsize;
         if (hasDeflatedPosition && bufferPos >= length) {
             throw new EOFException("Beyond eof read " + name + " " + bufferPos + ">=" + length);
-        }        
+        }
 
         final long currentPos = input.getFilePointer();
         byte[] cacheData = null;
@@ -328,14 +377,18 @@ public class TransformedIndexInput extends IndexInput {
             cacheData = cache.getChunk(currentPos);
         }
         if (cacheData != null) {
-            bufsize =  cacheData.length;
-            if (bufsize > buffer.length) {
-                buffer = new byte[bufsize];
+            bufsize = cacheData.length;
+            if (buffer.refCount > 1) {
+                buffer.refCount--;
+                buffer = memCache.newBuffer(bufsize);
             }
-            System.arraycopy(cacheData, 0, buffer, 0, bufsize);
+            if (bufsize > buffer.data.length) {
+                buffer.data = new byte[bufsize];
+            }
+            System.arraycopy(cacheData, 0, buffer.data, 0, bufsize);
             bufferDeflatedPos = currentPos;
-            if (chunkPos<chunkPositions.length-1) {
-                input.seek(chunkPositions[chunkPos+1]);
+            if (chunkPos < chunkPositions.length - 1) {
+                input.seek(chunkPositions[chunkPos + 1]);
             } else {
                 input.seek(endOfFilePosition);
             }
@@ -350,9 +403,12 @@ public class TransformedIndexInput extends IndexInput {
             final int compressed = input.readVInt();
             bufsize = input.readVInt();
             //  System.out.println("Decompressing " + input + " at " + input.getFilePointer()+" size="+bufsize);
-
-            if (bufsize > buffer.length) {
-                buffer = new byte[bufsize];
+            if (buffer.refCount > 1) {
+                buffer.refCount--;
+                buffer = new SharedBuffer(bufsize);
+            }
+            if (bufsize > buffer.data.length) {
+                buffer.data = new byte[bufsize];
             }
             //System.out.println("Reading "+name+" cp="+currentPos+" dp="+bufferPos+" len="+bufsize);
             // we are at current position ie. buffer allready contains data
@@ -367,12 +423,12 @@ public class TransformedIndexInput extends IndexInput {
                         readBuffer = new byte[compressed];
                     }
                     input.readBytes(readBuffer, 0, compressed);
-                    lcnt = inflater.transform(readBuffer, 0, compressed, buffer, bufsize);
+                    lcnt = inflater.transform(readBuffer, 0, compressed, buffer.data, bufsize);
                 }
                 // did not transform
                 if (lcnt < 0) {
                     lcnt = compressed;
-                    System.arraycopy(readBuffer, 0, buffer, 0, lcnt);
+                    System.arraycopy(readBuffer, 0, buffer.data, 0, lcnt);
                 }
                 if (lcnt != bufsize) {
                     throw new IOException("Incorrect buffer size " + lcnt + "!=" + bufsize);
@@ -380,7 +436,7 @@ public class TransformedIndexInput extends IndexInput {
                 //calculate CRC for consistency
                 if (crc != null) {
                     crc.reset();
-                    crc.update(buffer, 0, bufsize);
+                    crc.update(buffer.data, 0, bufsize);
                     if (crc.getValue() != chunkCRC) {
                         throw new IOException("CRC mismatch");
                     }
@@ -389,7 +445,7 @@ public class TransformedIndexInput extends IndexInput {
                     checkOverwriten(currentPos);
                 }
                 if (cache != null) {
-                    cache.putChunk(currentPos, buffer, bufsize);
+                    cache.putChunk(currentPos, buffer.data, bufsize);
                 }
             }
 
@@ -403,13 +459,13 @@ public class TransformedIndexInput extends IndexInput {
         if (bufferOffset >= bufsize) {
             readDecompress();
         }
-        return buffer[bufferOffset++];
+        return buffer.data[bufferOffset++];
     }
 
     @Override
     public void readBytes(byte[] b, int boffset, int len) throws IOException {
         if (len < bufsize - bufferOffset) {
-            System.arraycopy(buffer, bufferOffset, b, boffset, len);
+            System.arraycopy(buffer.data, bufferOffset, b, boffset, len);
             bufferOffset += len;
             return;
         }
@@ -420,7 +476,7 @@ public class TransformedIndexInput extends IndexInput {
             if (toCopy > bufsize - bufferOffset) {
                 toCopy = bufsize - bufferOffset;
             }
-            System.arraycopy(buffer, bufferOffset, b, loffset, toCopy);
+            System.arraycopy(buffer.data, bufferOffset, b, loffset, toCopy);
 
             loffset += toCopy;
             llen -= toCopy;
@@ -436,8 +492,8 @@ public class TransformedIndexInput extends IndexInput {
     public Object clone() {
         TransformedIndexInput clone = (TransformedIndexInput) super.clone();
         clone.input = (IndexInput) input.clone();
-        clone.buffer = new byte[buffer.length];
-        System.arraycopy(buffer, 0, clone.buffer, 0, bufsize);
+        // increase reference count to buffer, so next time someone changes data, it is duplicated
+        clone.buffer.refCount++;
         // readBuffer is shared with all clones
         clone.inflater = (ReadDataTransformer) inflater.copy();
         return clone;
@@ -446,6 +502,7 @@ public class TransformedIndexInput extends IndexInput {
     @Override
     public void close() throws IOException {
         input.close();
+        memCache.release(buffer);
         input = null;
     }
 
