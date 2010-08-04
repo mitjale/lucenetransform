@@ -35,63 +35,6 @@ import org.apache.lucene.store.transform.algorithm.ReadDataTransformer;
  */
 public class TransformedIndexInput extends IndexInput {
 
-
-    /** allocation is key performance problem, therefore every malloc we can
-     *  avoid is ok. MemoryCache is shared instance between original and all clones.
-     */
-    private static class MemoryCache {
-
-        /** make short list of last allocations */
-        private SharedBuffer[] buffers = new SharedBuffer[10];
-
-        synchronized SharedBuffer newBuffer(int size) {        
-            for (int i = 0; i < buffers.length; i++) {
-                if (buffers[i] != null && buffers[i].data.length >= size) {
-                    SharedBuffer result = buffers[i];
-                    buffers[i] = null;
-                    return result;
-                }
-            }
-            return new SharedBuffer(size);
-        }
-
-        synchronized void release(SharedBuffer buffer) {
-            buffer.refCount--;
-            if (buffer.refCount == 0) {
-                for (int i = 0; i < buffers.length; i++) {
-                    if (buffers[i] == null) {
-                        buffers[i] = buffer;
-                        buffer.refCount = 1;
-                        break;
-                    }
-                }
-            }
-        }
-    }
-
-    private static class SharedBuffer {
-
-        byte[] data;
-        volatile int refCount;
-
-        public SharedBuffer(int size) {
-            data = new byte[size];
-            refCount = 1;
-        }
-
-        public String toString(int bufSize) {
-            StringBuilder result = new StringBuilder();
-            result.append("refc=").append(refCount).append(" [");
-            for (int i = 0; i<bufSize;i++) {
-                if (i!=0) {
-                    result.append(", ");
-                }
-                result.append(data[i]);
-            }
-            result.append("]");
-            return result.toString();
-        }
-    }
     /** compressed input
      *
      */
@@ -119,7 +62,7 @@ public class TransformedIndexInput extends IndexInput {
     /** deflated position of buffer
      *
      */
-    private long bufferDeflatedPos;
+    private long bufferInflatedPos;
     /** inflater to decompress data
      *
      */
@@ -127,7 +70,7 @@ public class TransformedIndexInput extends IndexInput {
     /** decompressed data buffer
      *
      */
-    private SharedBuffer buffer;
+    private SharedBufferCache.SharedBuffer buffer;
     /** buffer to read compressed data chunks
      *
      */
@@ -156,19 +99,20 @@ public class TransformedIndexInput extends IndexInput {
      *
      */
     private CRC32 crc;
-
     /** true if all chunks are in sequence and there is no need for
      * chunk scan and overwrite check
      */
     private boolean orderedChunks;
-    private MemoryCache memCache;
+    private SharedBufferCache memCache;
     private String name;
     private DecompressionChunkCache cache;
     private int overwrittenChunks[];
     private int firstOverwrittenPos[];
+    private int maxChunkSize;
+    private int maxReadSize;
     private final Object READ_BUFFER_LOCK = new Object();
 
-    public TransformedIndexInput(String pName, IndexInput openInput, ReadDataTransformer inflater, DecompressionChunkCache cache) throws IOException {
+    public TransformedIndexInput(String pName, IndexInput openInput, ReadDataTransformer inflater, DecompressionChunkCache cache, SharedBufferCache memCache) throws IOException {
         this.input = openInput;
         this.crc = new CRC32();
         bufferOffset = 0;
@@ -177,11 +121,11 @@ public class TransformedIndexInput extends IndexInput {
         this.name = pName;
         bufsize = 0;
         this.cache = cache;
-        bufferDeflatedPos = -1;
+        bufferInflatedPos = -1;
         this.inflater = inflater;
-        buffer = new SharedBuffer(512);
-        readBuffer = new byte[512];
-        this.memCache = new MemoryCache();
+        buffer = memCache.newBuffer(8192);
+        readBuffer = new byte[8192];
+        this.memCache = memCache;
 
         if (input.length() >= 16) {
             length = input.readLong();
@@ -218,10 +162,10 @@ public class TransformedIndexInput extends IndexInput {
             int obufsize = bufsize;
             for (int j = 0; j < overwrittenChunks.length; j++) {
                 int i = overwrittenChunks[j];
-                if (inflatedPositions[i]+inflatedLengths[i] >= bufferPos && inflatedPositions[i] < bufferPos + bufsize && currentPos < chunkPositions[i]) {
+                if (inflatedPositions[i] + inflatedLengths[i] >= bufferPos && inflatedPositions[i] < bufferPos + bufsize && currentPos < chunkPositions[i]) {
                     int tbufsize = (int) (inflatedPositions[i] - bufferPos);
                     if (tbufsize <= bufsize) {
-                      //      System.out.println("Found overwrite of "+chunkPos+"("+bufferPos+":"+bufsize+") "+name+" at "+ i+"("+inflatedPositions[i]+":"+inflatedLengths[i]+")");
+                        //      System.out.println("Found overwrite of "+chunkPos+"("+bufferPos+":"+bufsize+") "+name+" at "+ i+"("+inflatedPositions[i]+":"+inflatedLengths[i]+")");
                         bufsize = tbufsize;
                         inflatedPos = inflatedPositions[i];
                         chunkPosition = chunkPositions[i];
@@ -231,9 +175,9 @@ public class TransformedIndexInput extends IndexInput {
                 // later in the file. It can be called recursively
                 if (bufsize < obufsize) {
                     // copy all data before recursive call
-                    SharedBuffer original = buffer;
+                    SharedBufferCache.SharedBuffer original = buffer;
                     //System.out.println("orig="+original.toString(obufsize));
-                    buffer = memCache.newBuffer(buffer.data.length);
+                    buffer = memCache.newBuffer(original.data.length);
                     long lpos = input.getFilePointer();
                     long obufferPos = bufferPos;
                     int overOffset = bufsize;
@@ -250,11 +194,11 @@ public class TransformedIndexInput extends IndexInput {
                     input.seek(lpos);
                     // combine results to single buffer, as it is result of readDecompressImp
                     int nbufsize = Math.max(obufsize, overOffset + bufsize);
-                    //System.out.println("Merging "+bufsize+" at "+overOffset +" in "+nbufsize);
+                    // System.out.println("Merging at "+obufferPos+" size "+overOffset+" at "+ overOffset +" in "+nbufsize);
                     byte[] result = new byte[nbufsize];
                     System.arraycopy(original.data, 0, result, 0, obufsize);
-                    if (overOffset<0) {
-                        System.arraycopy(buffer.data, -overOffset, result, 0, bufsize+overOffset);
+                    if (overOffset < 0) {
+                        System.arraycopy(buffer.data, -overOffset, result, 0, bufsize + overOffset);
                     } else {
                         System.arraycopy(buffer.data, 0, result, overOffset, bufsize);
                     }
@@ -290,17 +234,29 @@ public class TransformedIndexInput extends IndexInput {
             readDecompressImp(false);
             IndexInput in = new ByteIndexInput(buffer.data);
             // if chunk directory is large, buffers are too big, so reset them
-            buffer.data = new byte[512];
+            // release buffer and realocate it later
+            buffer.data = null;
             readBuffer = new byte[512];
             int entries = in.readVInt();
             inflatedPositions = new long[entries];
             chunkPositions = new long[entries];
             inflatedLengths = new int[entries];
+            long lastFilePos = 0;
             for (int i = 0; i < entries; i++) {
                 inflatedPositions[i] = in.readVLong();
                 chunkPositions[i] = in.readVLong();
-                inflatedLengths[i] = in.readVInt();
+                final int infLen = inflatedLengths[i] = in.readVInt();
+                if (infLen > maxChunkSize) {
+                    maxChunkSize = infLen;
+                }
+                final int readLen = (int) (inflatedPositions[i] - lastFilePos);
+                if (maxReadSize < readLen) {
+                    maxReadSize = readLen;
+                }
             }
+            // realocate buffer at maximum chunk size
+            buffer.data = new byte[maxChunkSize];
+            readBuffer = new byte[maxReadSize + 4];
             in.close();
         }
         detectOrder();
@@ -312,7 +268,7 @@ public class TransformedIndexInput extends IndexInput {
      * 
      */
     private void sortChunks() {
-             Integer[] sortOrder = new Integer[inflatedPositions.length];
+        Integer[] sortOrder = new Integer[inflatedPositions.length];
         for (int i = 0; i < sortOrder.length; i++) {
             sortOrder[i] = i;
         }
@@ -369,6 +325,12 @@ public class TransformedIndexInput extends IndexInput {
             chunks.add(chunkPos);
             inflated.add(inflatedPos);
             sizes.add(inflatedSize);
+            if (inflatedSize > maxChunkSize) {
+                maxChunkSize = inflatedSize;
+            }
+            if (maxReadSize < inflatedSize) {
+                maxReadSize = inflatedSize;
+            }
             length += inflatedSize;
             input.seek(input.getFilePointer() + chunkSize);
         }
@@ -380,6 +342,9 @@ public class TransformedIndexInput extends IndexInput {
             inflatedPositions[i] = inflated.get(i);
             chunkPositions[i] = chunks.get(i);
         }
+        buffer.data = new byte[maxChunkSize];
+        readBuffer = new byte[maxReadSize + 4];
+        detectOrder();
         sortChunks();
         endOfFilePosition = input.length();
     }
@@ -401,20 +366,20 @@ public class TransformedIndexInput extends IndexInput {
      * @return offset inside decomprsesed buffer that has current bufferPos
      * @throws IOException
      */
-     private int seekToChunk() throws IOException {
+    private int seekToChunk() throws IOException {
         if (inflatedPositions != null) {
-            if (inflatedPositions[chunkPos]==bufferPos) {
+            if (inflatedPositions[chunkPos] == bufferPos) {
                 return 0;
             }
             // for performance reason check, next chunk if it is on correct location
-            if (chunkPos >= 0 && chunkPos+1 < inflatedPositions.length) {
-                if (inflatedPositions[chunkPos+1] == bufferPos) {
+            if (chunkPos >= 0 && chunkPos + 1 < inflatedPositions.length) {
+                if (inflatedPositions[chunkPos + 1] == bufferPos) {
                     return 0;
                 }
             }
             final int fchunk = findFirstChunk(bufferPos);
             // check for aligned reads (tyipical situation), especially for checkOverwritten
-            for (int i = fchunk; i < inflatedPositions.length && inflatedPositions[i]<=bufferPos; i++) {
+            for (int i = fchunk; i < inflatedPositions.length && inflatedPositions[i] <= bufferPos; i++) {
                 if (inflatedPositions[i] == bufferPos) {
                     if (input.getFilePointer() != chunkPositions[i]) {
                         //System.out.println("Correcting position for chunk "+i+"  loc="+inflatedPositions[i]+" oldLoc="+inflatedPositions[chunkPos]);
@@ -430,7 +395,7 @@ public class TransformedIndexInput extends IndexInput {
             // if it is called inside checkOvewritten, it is definetly inifinite loop
             // All situations like this should becaght and merged by check overwritten
             // But just for the case.
-            System.out.println("Warning chunk "+chunkPos+" not cought by overwriten. Using fallback");
+            System.out.println("Warning chunk " + chunkPos + "  at "+bufferPos+" not cought by overwriten. Using fallback");
             for (int i = fchunk; i < inflatedPositions.length; i++) {
                 if (bufferPos >= inflatedPositions[i] && bufferPos < inflatedPositions[i] + inflatedLengths[i]) {
                     int newOffset = (int) (bufferPos - inflatedPositions[i]);
@@ -438,7 +403,7 @@ public class TransformedIndexInput extends IndexInput {
                     chunkPos = i;
                     if (input.getFilePointer() != chunkPositions[i]) {
                         input.seek(chunkPositions[i]);
-                    }                 
+                    }
                     return newOffset;
                 }
             }
@@ -469,22 +434,23 @@ public class TransformedIndexInput extends IndexInput {
             locBufferOffset = seekToChunk();
         }
         final long currentPos = input.getFilePointer();
+        final long cachepos = bufferPos;
         byte[] cacheData = null;
-        if (cache != null) {
-            cache.lock(currentPos);
-            cacheData = cache.getChunk(currentPos);
+        if (hasDeflatedPosition &&  cache != null) {
+            cache.lock(cachepos);
+            cacheData = cache.getChunk(cachepos);
         }
         if (cacheData != null) {
             bufsize = cacheData.length;
             if (buffer.refCount > 1) {
                 buffer.refCount--;
-                buffer = memCache.newBuffer(bufsize);
+                buffer = memCache.newBuffer(maxChunkSize);
             }
             if (bufsize > buffer.data.length) {
-                buffer.data = new byte[bufsize];
+                buffer.data = new byte[maxChunkSize];
             }
             System.arraycopy(cacheData, 0, buffer.data, 0, bufsize);
-            bufferDeflatedPos = currentPos;
+            bufferInflatedPos = currentPos;
             if (chunkPos < chunkPositions.length - 1) {
                 input.seek(chunkPositions[chunkPos + 1]);
             } else {
@@ -503,17 +469,14 @@ public class TransformedIndexInput extends IndexInput {
             //  System.out.println("Decompressing " + input + " at " + input.getFilePointer()+" size="+bufsize);
             if (buffer.refCount > 1) {
                 buffer.refCount--;
-                buffer = new SharedBuffer(bufsize);
-            }
-            if (bufsize > buffer.data.length) {
-                buffer.data = new byte[bufsize];
+                buffer = memCache.newBuffer(maxChunkSize);
             }
             //System.out.println("Reading "+name+" cp="+currentPos+" dp="+bufferPos+" len="+bufsize);
             // we are at current position ie. buffer allready contains data
-            if (bufferDeflatedPos == currentPos) {
+            if (bufferInflatedPos == currentPos) {
                 input.seek(input.getFilePointer() + compressed);
             } else {
-                bufferDeflatedPos = currentPos;
+                bufferInflatedPos = currentPos;
                 //           System.out.println("Decompress at " + currentPos + " " + cache);
                 int lcnt;
                 synchronized (READ_BUFFER_LOCK) {
@@ -522,11 +485,11 @@ public class TransformedIndexInput extends IndexInput {
                     }
                     input.readBytes(readBuffer, 0, compressed);
                     lcnt = inflater.transform(readBuffer, 0, compressed, buffer.data, bufsize);
-                }
-                // did not transform
-                if (lcnt < 0) {
-                    lcnt = compressed;
-                    System.arraycopy(readBuffer, 0, buffer.data, 0, lcnt);
+                    // did not transform
+                    if (lcnt < 0) {
+                        lcnt = compressed;
+                        System.arraycopy(readBuffer, 0, buffer.data, 0, lcnt);
+                    }
                 }
                 if (lcnt != bufsize) {
                     throw new IOException("Incorrect buffer size " + lcnt + "!=" + bufsize);
@@ -542,13 +505,14 @@ public class TransformedIndexInput extends IndexInput {
                 if (!orderedChunks && firstOverwrittenPos != null && firstOverwrittenPos[chunkPos] >= 0) {
                     checkOverwriten(currentPos);
                 }
-                if (cache != null) {
-                    cache.putChunk(currentPos, buffer.data, bufsize);
+                if (hasDeflatedPosition && cache != null) {
+                    cache.putChunk(cachepos, buffer.data, bufsize);
                 }
             }
 
         }
         bufferOffset = locBufferOffset;
+        bufferInflatedPos = currentPos;
         chunkPos++;
     }
 
@@ -679,7 +643,7 @@ public class TransformedIndexInput extends IndexInput {
             if (inflatedPositions[i] < maxPos) {
                 tov[pos] = i;
                 pos++;
-            }            
+            }
             if (cpos > maxPos) {
                 maxPos = cpos;
             }
@@ -701,15 +665,16 @@ public class TransformedIndexInput extends IndexInput {
         }
         //System.out.println("Overwritten ="+pos);
     }
+
     private void detectOrder() {
         long cpos = 0;
-        orderedChunks  =true;
+        orderedChunks = true;
         for (int i = 0; i < inflatedPositions.length; i++) {
-            if (inflatedPositions[i]!=cpos) {
+            if (inflatedPositions[i] != cpos) {
                 orderedChunks = false;
             }
         }
-       // System.out.println("Ordered chunks "+name+"="+orderedChunks);
+        // System.out.println("Ordered chunks "+name+"="+orderedChunks);
     }
 
 

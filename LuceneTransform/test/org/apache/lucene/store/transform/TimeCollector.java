@@ -47,37 +47,75 @@ public class TimeCollector {
         }
     }
 
+
+
     public String toString() {
         StringBuilder result = new StringBuilder();
         List<String> allops = ops;
-        result.append("||Method");
-        result.append("||");
+        result.append("<table border=\"1\">");
+        result.append("<tr><th>Method</th>");
         for (int i = 0; i < allops.size(); i++) {
-            result.append(allops.get(i)).append("||");
+            result.append("<td>").append(allops.get(i)).append("</td>");
         }
-        result.append("\n");
+        result.append("</tr>");
+        Map<String,List<Long>> reference = null;
+        if (!methods.isEmpty()) {
+            reference = results.get(methods.get(0));
+        }
+
         for (String method : methods) {
             Map<String,List<Long>> mdata = results.get(method);
-            result.append("||");
-            result.append(method).append("||");
+            result.append("<tr><td>").append(method).append("</td>");            
             for (int i = 0; i < allops.size(); i++) {
                 List<Long> data = mdata.get(allops.get(i));
                 if (data != null) {
-                    double[] ddata = new double[data.size()];
-                    for (int j = 0; j < ddata.length; j++) {
-                        ddata[j] = data.get(j);
+                    double[] ddata = toArray(data);
+                    String color = null;
+                    String refData = null;
+                    if (reference!=null) {
+                        List<Long> rdata = reference.get(allops.get(i));
+                        if (rdata!=null) {
+                            double[] rddata = toArray(rdata);
+                            double ravg = average(rddata);
+                            double rstd = stdev(rddata);
+                            double avg = average(ddata);
+                            double std = stdev(ddata);
+                            double pratio = avg*100/ravg;
+                            if (pratio>200) {
+                                color="red";
+                            }
+                            if (pratio<50) {
+                                color = "green";
+                            }
+                            result.append("<td");
+                            if (color!=null) {
+                                result.append(" bgcolor=\"").append(color).append("\"");
+                            }
+                            result.append(">");
+                            result.append(String.format("%02.02f+/-%02.02f ", avg, std));
+                            result.append(String.format("%02.02f%%+/-%02.02f%%", pratio , pratio*((rstd/ravg)+(std/avg))));
+                            result.append("</td>");
+                        }
+                    } else {
+                        result.append(String.format("<td>%02.02f+/-%02.02f</td>", average(ddata), stdev(ddata)));
                     }
-
-                    result.append(String.format("%02.02f+/-%02.02f", average(ddata), stdev(ddata)));
                 } else {
-                    result.append("N/A");
-                }
-                result.append("||");
+                    result.append("<td>N/A</td>");
+                }                
             }
-            result.append("\n");
+            result.append("</tr>");
 
         }
+        result.append("</table>");
         return result.toString();
+    }
+
+    private double[] toArray(List<Long> data) {
+        double[] ddata = new double[data.size()];
+        for (int j = 0; j < ddata.length; j++) {
+            ddata[j] = data.get(j);
+        }
+        return ddata;
     }
 
     public void clear() {

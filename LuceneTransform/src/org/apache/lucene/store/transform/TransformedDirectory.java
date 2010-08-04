@@ -105,6 +105,8 @@ public class TransformedDirectory extends Directory {
      */
     private int cacheSize = 100;
 
+    private static SharedBufferCache memCache = new SharedBufferCache();
+
     /** Create compressed directory, that utilizes direct compression with default parameters.
      *
      * @param nested directory to store compressed data.
@@ -220,7 +222,7 @@ public class TransformedDirectory extends Directory {
         if (cacheSize>0) {
             cache = new LRUChunkCache(cacheSize);
         }
-        return new TransformedIndexInput(name,nested.openInput(name), (ReadDataTransformer) readTransformer.copy(),cache);
+        return new TransformedIndexInput(name,nested.openInput(name), (ReadDataTransformer) readTransformer.copy(),cache,memCache);
     }
 
     @Override

@@ -15,12 +15,12 @@ public class MeasureTimes {
 
     @Test
     public void batchTest() throws Exception {
-        singleBatchTest(128 * 1024, true);
-        singleBatchTest(16*1024, true);
         singleBatchTest(4 * 1024, true);
-        singleBatchTest(128 * 1024, false);
-        singleBatchTest(16 * 1024, false);
+        singleBatchTest(16*1024, true);
+        singleBatchTest(128 * 1024, true);
         singleBatchTest(4 * 1024, false);
+        singleBatchTest(16 * 1024, false);
+        singleBatchTest(128 * 1024, false);
     }
 
     public static void main(String args[]) throws IOException, Exception {
@@ -34,7 +34,7 @@ public class MeasureTimes {
         tt.setChunkSize(chunkSize);
         tt.setDirectStore(directStore);
         for (int i = 0; i < 31; i++) {
-            System.out.println("Run cs=" + (chunkSize / 1024) + "k directStore=" + directStore + " run=" + i);
+  //          System.out.println("Run cs=" + (chunkSize / 1024) + "k directStore=" + directStore + " run=" + i);
             tt.setUp();
             tt.lucene();
             tt.setUp();
@@ -49,12 +49,13 @@ public class MeasureTimes {
             tt.compressedEncryptedCBC();
             if (i == 0) {
                 // clear statistics to prevent startup influence
-                System.out.println(tt.getStatistics());
+//                System.out.println(tt.getStatistics());
                 tt.getStatistics().clear();
             } else {
-                System.out.println(tt.getStatistics());
+  //              System.out.println(tt.getStatistics());
             }
         }
+        System.out.println("Chunk size " + (chunkSize / 1024) + "k logAppend=" + directStore);
         System.out.println(tt.getStatistics());
     }
 }
