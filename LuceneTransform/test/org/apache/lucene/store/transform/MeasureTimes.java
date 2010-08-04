@@ -16,7 +16,7 @@ public class MeasureTimes {
     @Test
     public void batchTest() throws Exception {
         singleBatchTest(128 * 1024, true);
-        singleBatchTest(16 * 1024, true);
+        singleBatchTest(16*1024, true);
         singleBatchTest(4 * 1024, true);
         singleBatchTest(128 * 1024, false);
         singleBatchTest(16 * 1024, false);
@@ -49,6 +49,7 @@ public class MeasureTimes {
             tt.compressedEncryptedCBC();
             if (i == 0) {
                 // clear statistics to prevent startup influence
+                System.out.println(tt.getStatistics());
                 tt.getStatistics().clear();
             } else {
                 System.out.println(tt.getStatistics());

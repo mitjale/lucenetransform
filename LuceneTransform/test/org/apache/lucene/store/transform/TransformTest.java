@@ -67,7 +67,7 @@ public class TransformTest {
         delTree(new File("data/test"));
         //allow OS FS layer to cleanup
 
-        //Thread.sleep(10000);
+      //  Thread.sleep(10000);
     }
 
     @After
