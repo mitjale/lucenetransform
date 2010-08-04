@@ -48,14 +48,12 @@ public class LRUChunkCache implements DecompressionChunkCache {
 
     }
 
-    public synchronized byte[] getChunk(long pos) {
-        SoftReference<byte[]> w = cache.get(pos);
+    public synchronized byte[] getChunk(final long pos) {
+        final SoftReference<byte[]> w = cache.get(pos);
         if (w != null) {
-            byte[] result = w.get();
+            final byte[] result = w.get();
             if (result != null) {
                 hit++;
-                cache.remove(pos);
-                cache.put(pos,w);
                 freeLock(pos);
             } else {
                 cache.remove(pos);
@@ -67,13 +65,13 @@ public class LRUChunkCache implements DecompressionChunkCache {
         return null;
     }
 
-    public synchronized void putChunk(long pos, byte[] data, int pSize) {
+    public synchronized void putChunk(final long pos, final byte[] data, final int pSize) {
         try {
             if (cache.size() > cacheSize) {
                 //OPS how is this possible                
                 cache.clear();
             }
-            byte copy[] = new byte[pSize];
+            final byte copy[] = new byte[pSize];
             System.arraycopy(data, 0, copy, 0, pSize);
             cache.remove(pos);
             cache.put(pos, new SoftReference<byte[]>(copy));
