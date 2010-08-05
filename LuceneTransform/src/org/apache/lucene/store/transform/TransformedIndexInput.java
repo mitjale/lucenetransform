@@ -249,10 +249,11 @@ public class TransformedIndexInput extends IndexInput {
                 if (infLen > maxChunkSize) {
                     maxChunkSize = infLen;
                 }
-                final int readLen = (int) (inflatedPositions[i] - lastFilePos);
+                final int readLen = (int) (chunkPositions[i] - lastFilePos);
                 if (maxReadSize < readLen) {
                     maxReadSize = readLen;
                 }
+                lastFilePos=chunkPositions[i];
             }
             // realocate buffer at maximum chunk size
             buffer.data = new byte[maxChunkSize];
@@ -471,6 +472,9 @@ public class TransformedIndexInput extends IndexInput {
             if (buffer.refCount > 1) {
                 buffer.refCount--;
                 buffer = memCache.newBuffer(maxChunkSize);
+            }
+            if (!hasDeflatedPosition && bufsize > buffer.data.length) {
+                buffer.data = new byte[bufsize];
             }
             //System.out.println("Reading "+name+" cp="+currentPos+" dp="+bufferPos+" len="+bufsize);
             // we are at current position ie. buffer allready contains data
