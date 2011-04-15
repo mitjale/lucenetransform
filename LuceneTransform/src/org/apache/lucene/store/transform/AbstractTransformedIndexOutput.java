@@ -30,6 +30,8 @@ import org.apache.lucene.store.transform.algorithm.StoreDataTransformer;
  */
 public abstract class AbstractTransformedIndexOutput extends IndexOutput {
 
+
+
     /** used to store compressed chunk directory information. This information
      * is used to find (and merge) information about possible chunk overwrites,
      * that are result of seek and write operation.
@@ -189,7 +191,7 @@ public abstract class AbstractTransformedIndexOutput extends IndexOutput {
 
         // flush all chunks
         flush();
-
+        long directoryPos = length();
         // create chunk directory in separate single compressed chunk
         ByteArrayOutputStream bos = new ByteArrayOutputStream();
         IndexOutput boutput = new StreamIndexOutput(bos);
@@ -214,6 +216,7 @@ public abstract class AbstractTransformedIndexOutput extends IndexOutput {
         // write chunk directory postion at end of the file
         output.writeLong(entryPos);
         output.flush();
+        updateFileLength(directoryPos);
         output.close();
         compressedDir.release(name);
 
@@ -225,4 +228,11 @@ public abstract class AbstractTransformedIndexOutput extends IndexOutput {
      * @throws IOException
      */
     public abstract void sync() throws IOException;
+
+
+    /** write length of file on the begining of file to indicate successfull close and that directory has been
+     * successfully written
+     * @param pLength actual length of file
+     */
+    protected abstract void updateFileLength(long pLength) throws IOException;
 }

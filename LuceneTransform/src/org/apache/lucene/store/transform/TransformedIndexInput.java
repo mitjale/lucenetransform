@@ -246,6 +246,11 @@ public class TransformedIndexInput extends IndexInput {
                 inflatedPositions[i] = in.readVLong();
                 chunkPositions[i] = in.readVLong();
                 final int infLen = inflatedLengths[i] = in.readVInt();
+                if (inflatedPositions[i]+inflatedLengths[i]>length || inflatedPositions[i]<0 || inflatedLengths[i]<0) {
+                    // fallbakck to scan since directory seems to be corrupted
+                    scanPositions();
+                    return;
+                }
                 if (infLen > maxChunkSize) {
                     maxChunkSize = infLen;
                 }

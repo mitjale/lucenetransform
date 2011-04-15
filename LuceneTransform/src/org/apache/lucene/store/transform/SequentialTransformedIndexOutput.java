@@ -133,8 +133,6 @@ public class SequentialTransformedIndexOutput extends AbstractTransformedIndexOu
         // on close length information is written at the begininig of file
         flush();
         long pos = output.getFilePointer();
-        output.seek(0);
-        output.writeLong(length());
         output.seek(pos);
         // actually close file and write chunk directory
         super.close();
@@ -199,5 +197,11 @@ public class SequentialTransformedIndexOutput extends AbstractTransformedIndexOu
     @Override
     public void sync() throws IOException {
         flush();
+    }
+
+    @Override
+    protected void updateFileLength(long pLength) throws IOException {
+        output.seek(0);
+        output.writeLong(pLength);
     }
 }

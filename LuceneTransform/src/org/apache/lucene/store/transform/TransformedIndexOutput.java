@@ -46,6 +46,10 @@ public class TransformedIndexOutput extends AbstractTransformedIndexOutput {
      */
     private int chunkSize;
 
+    /** length on close, to preserve information after deletion
+     * 
+     */
+    private long closeLength=-1;
 
 
     /** creates compressed output.
@@ -93,9 +97,9 @@ public class TransformedIndexOutput extends AbstractTransformedIndexOutput {
         // directory with offsets offsets of compressed chunks with
         // real position in decompressed stream
         IndexInput in = tempDirectory.openInput(tmpName);
-        long len = in.length();
-        // write length of the file at the begining for easier retreval
-        output.writeLong(len);
+        long len = closeLength = in.length();
+        // write length of the file at the begining for easier retreval 
+        output.writeLong(-1);
         
         // write configuration
         writeConfig();
@@ -141,10 +145,18 @@ public class TransformedIndexOutput extends AbstractTransformedIndexOutput {
 
     @Override
     public long length() throws IOException {
+        if (closeLength>=0) {
+            return closeLength;
+        }
         return tempOut.length();
     }
 
     public void sync() throws IOException {
         flush();
+    }
+
+    @Override
+    protected void updateFileLength(long pLength) throws IOException {
+        throw new UnsupportedOperationException("Not supported yet.");
     }
 }
