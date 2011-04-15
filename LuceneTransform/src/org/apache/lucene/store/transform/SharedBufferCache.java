@@ -4,7 +4,7 @@ package org.apache.lucene.store.transform;
  * allocation is key performance problem, therefore every malloc we can
  * avoid is ok. MemoryCache is shared instance between original and all clones.
  */
-class SharedBufferCache {
+public class SharedBufferCache {
 
     public static class SharedBuffer {
 
