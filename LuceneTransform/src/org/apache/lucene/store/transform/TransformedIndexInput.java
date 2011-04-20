@@ -449,80 +449,82 @@ public class TransformedIndexInput extends IndexInput {
             cache.lock(cachepos);
             cacheData = cache.getChunk(cachepos);
         }
-        if (cacheData != null) {
-            cache.unlock(cachepos);
-            bufsize = cacheData.length;
-            if (buffer.refCount > 1) {
-                buffer.refCount--;
-                buffer = memCache.newBuffer(maxChunkSize);
-            } else if (bufsize > buffer.data.length) {
-                buffer.data = new byte[maxChunkSize];
-            }
-            System.arraycopy(cacheData, 0, buffer.data, 0, bufsize);
-            if (chunkPos < chunkPositions.length - 1) {
-                input.seek(chunkPositions[chunkPos + 1]);
+        try {
+            if (cacheData != null) {
+                bufsize = cacheData.length;
+                if (buffer.refCount > 1) {
+                    buffer.refCount--;
+                    buffer = memCache.newBuffer(maxChunkSize);
+                } else if (bufsize > buffer.data.length) {
+                    buffer.data = new byte[maxChunkSize];
+                }
+                System.arraycopy(cacheData, 0, buffer.data, 0, bufsize);
+                if (chunkPos < chunkPositions.length - 1) {
+                    input.seek(chunkPositions[chunkPos + 1]);
+                } else {
+                    input.seek(endOfFilePosition);
+                }
             } else {
-                input.seek(endOfFilePosition);
-            }
-        } else {
-            if (hasDeflatedPosition) {
-                final long inflatedPos = input.readVLong();
-                if (bufferPos != inflatedPos) {
-                    throw new IOException("Invalid compression chunk location " + bufferPos + "!=" + inflatedPos);
+                if (hasDeflatedPosition) {
+                    final long inflatedPos = input.readVLong();
+                    if (bufferPos != inflatedPos) {
+                        throw new IOException("Invalid compression chunk location " + bufferPos + "!=" + inflatedPos);
+                    }
+                }
+                final long chunkCRC = input.readVLong();
+                final int compressed = input.readVInt();
+                bufsize = input.readVInt();
+                //  System.out.println("Decompressing " + input + " at " + input.getFilePointer()+" size="+bufsize);
+                if (buffer.refCount > 1) {
+                    buffer.refCount--;
+                    buffer = memCache.newBuffer(maxChunkSize);
+                }
+                if (!hasDeflatedPosition && bufsize > buffer.data.length) {
+                    buffer.data = new byte[bufsize];
+                }
+                //System.out.println("Reading "+name+" cp="+currentPos+" dp="+bufferPos+" len="+bufsize);
+                // we are at current position ie. buffer allready contains data
+                if (bufferInflatedPos == currentPos) {
+                    input.seek(input.getFilePointer() + compressed);
+                } else {
+                    bufferInflatedPos = currentPos;
+                    //           System.out.println("Decompress at " + currentPos + " " + cache);
+                    int lcnt;
+                    synchronized (READ_BUFFER_LOCK) {
+                        if (compressed > readBuffer.length) {
+                            readBuffer = new byte[compressed];
+                        }
+                        input.readBytes(readBuffer, 0, compressed);
+                        lcnt = inflater.transform(readBuffer, 0, compressed, buffer.data, bufsize);
+                        // did not transform
+                        if (lcnt < 0) {
+                            lcnt = compressed;
+                            System.arraycopy(readBuffer, 0, buffer.data, 0, lcnt);
+                        }
+                    }
+                    if (lcnt != bufsize) {
+                        throw new IOException("Incorrect buffer size " + lcnt + "!=" + bufsize);
+                    }
+                    //calculate CRC for consistency
+                    if (crc != null) {
+                        crc.reset();
+                        crc.update(buffer.data, 0, bufsize);
+                        if (crc.getValue() != chunkCRC) {
+                            throw new IOException("CRC mismatch");
+                        }
+                    }
+                    if (!orderedChunks && firstOverwrittenPos != null && firstOverwrittenPos[chunkPos] >= 0) {
+                        checkOverwriten(currentPos);
+                    }
+                    if (hasDeflatedPosition && cache != null) {
+                        cache.putChunk(cachepos, buffer.data, bufsize);
+                    }
                 }
             }
-            final long chunkCRC = input.readVLong();
-            final int compressed = input.readVInt();
-            bufsize = input.readVInt();
-            //  System.out.println("Decompressing " + input + " at " + input.getFilePointer()+" size="+bufsize);
-            if (buffer.refCount > 1) {
-                buffer.refCount--;
-                buffer = memCache.newBuffer(maxChunkSize);
-            }
-            if (!hasDeflatedPosition && bufsize > buffer.data.length) {
-                buffer.data = new byte[bufsize];
-            }
-            //System.out.println("Reading "+name+" cp="+currentPos+" dp="+bufferPos+" len="+bufsize);
-            // we are at current position ie. buffer allready contains data
-            if (bufferInflatedPos == currentPos) {
-                input.seek(input.getFilePointer() + compressed);
+        } finally {
+            if (hasDeflatedPosition && cache != null) {
                 cache.unlock(cachepos);
-            } else {
-                bufferInflatedPos = currentPos;
-                //           System.out.println("Decompress at " + currentPos + " " + cache);
-                int lcnt;
-                synchronized (READ_BUFFER_LOCK) {
-                    if (compressed > readBuffer.length) {
-                        readBuffer = new byte[compressed];
-                    }
-                    input.readBytes(readBuffer, 0, compressed);
-                    lcnt = inflater.transform(readBuffer, 0, compressed, buffer.data, bufsize);
-                    // did not transform
-                    if (lcnt < 0) {
-                        lcnt = compressed;
-                        System.arraycopy(readBuffer, 0, buffer.data, 0, lcnt);
-                    }
-                }
-                if (lcnt != bufsize) {
-                    throw new IOException("Incorrect buffer size " + lcnt + "!=" + bufsize);
-                }
-                //calculate CRC for consistency
-                if (crc != null) {
-                    crc.reset();
-                    crc.update(buffer.data, 0, bufsize);
-                    if (crc.getValue() != chunkCRC) {
-                        throw new IOException("CRC mismatch");
-                    }
-                }
-                if (!orderedChunks && firstOverwrittenPos != null && firstOverwrittenPos[chunkPos] >= 0) {
-                    checkOverwriten(currentPos);
-                }
-                if (hasDeflatedPosition && cache != null) {
-                    cache.putChunk(cachepos, buffer.data, bufsize);
-                    cache.unlock(cachepos);
-                }
             }
-
         }
         bufferOffset = locBufferOffset;
         bufferInflatedPos = currentPos;

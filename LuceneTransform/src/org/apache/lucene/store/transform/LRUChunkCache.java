@@ -74,9 +74,9 @@ public class LRUChunkCache implements DecompressionChunkCache {
             System.arraycopy(data, 0, copy, 0, pSize);
             cache.remove(pos);
             cache.put(pos, new SoftReference<byte[]>(copy));
-          
+
         } catch (OutOfMemoryError ex) {
-            cache.clear();          
+            cache.clear();
         }
     }
 
@@ -112,18 +112,18 @@ public class LRUChunkCache implements DecompressionChunkCache {
                 locks.put(pos, lock);
                 return;
             }
-        }
-        synchronized (lock) {
-            try {
-                lock.wait();
-            } catch (InterruptedException ex) {
-                Logger.getLogger(LRUChunkCache.class.getName()).log(Level.SEVERE, null, ex);
+            synchronized (lock) {
+                try {
+                    lock.wait();
+                } catch (InterruptedException ex) {
+                    Logger.getLogger(LRUChunkCache.class.getName()).log(Level.SEVERE, null, ex);
+                }
             }
         }
     }
 
     @Override
     public String toString() {
-        return "LRUCache pages="+cache.size()+" locks="+locks.size();
+        return "LRUCache pages=" + cache.size() + " locks=" + locks.size();
     }
 }
