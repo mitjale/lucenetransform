@@ -246,7 +246,7 @@ public class TransformedIndexInput extends IndexInput {
                 inflatedPositions[i] = in.readVLong();
                 chunkPositions[i] = in.readVLong();
                 final int infLen = inflatedLengths[i] = in.readVInt();
-                if (inflatedPositions[i]+inflatedLengths[i]>length || inflatedPositions[i]<0 || inflatedLengths[i]<0) {
+                if (inflatedPositions[i] + inflatedLengths[i] > length || inflatedPositions[i] < 0 || inflatedLengths[i] < 0) {
                     // fallbakck to scan since directory seems to be corrupted
                     scanPositions();
                     return;
@@ -258,7 +258,7 @@ public class TransformedIndexInput extends IndexInput {
                 if (maxReadSize < readLen) {
                     maxReadSize = readLen;
                 }
-                lastFilePos=chunkPositions[i];
+                lastFilePos = chunkPositions[i];
             }
             // realocate buffer at maximum chunk size
             buffer.data = new byte[maxChunkSize];
@@ -450,6 +450,7 @@ public class TransformedIndexInput extends IndexInput {
             cacheData = cache.getChunk(cachepos);
         }
         if (cacheData != null) {
+            cache.unlock(cachepos);
             bufsize = cacheData.length;
             if (buffer.refCount > 1) {
                 buffer.refCount--;
@@ -485,6 +486,7 @@ public class TransformedIndexInput extends IndexInput {
             // we are at current position ie. buffer allready contains data
             if (bufferInflatedPos == currentPos) {
                 input.seek(input.getFilePointer() + compressed);
+                cache.unlock(cachepos);
             } else {
                 bufferInflatedPos = currentPos;
                 //           System.out.println("Decompress at " + currentPos + " " + cache);
@@ -517,6 +519,7 @@ public class TransformedIndexInput extends IndexInput {
                 }
                 if (hasDeflatedPosition && cache != null) {
                     cache.putChunk(cachepos, buffer.data, bufsize);
+                    cache.unlock(cachepos);
                 }
             }
 

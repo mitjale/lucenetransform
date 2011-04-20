@@ -36,6 +36,12 @@ public interface DecompressionChunkCache {
      * @param pos position in plain file
      */
     void lock(long pos);
+
+    /** unlocks position for reading
+     *
+     * @param pos in plain file
+     */
+    void unlock(long pos);
     /** store chunk in the cache and release obtained lock. Must copy data into
      * internal buffer.
      *

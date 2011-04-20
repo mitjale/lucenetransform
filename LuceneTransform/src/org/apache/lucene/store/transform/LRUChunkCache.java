@@ -54,7 +54,6 @@ public class LRUChunkCache implements DecompressionChunkCache {
             final byte[] result = w.get();
             if (result != null) {
                 hit++;
-                freeLock(pos);
             } else {
                 cache.remove(pos);
                 miss++;
@@ -75,14 +74,13 @@ public class LRUChunkCache implements DecompressionChunkCache {
             System.arraycopy(data, 0, copy, 0, pSize);
             cache.remove(pos);
             cache.put(pos, new SoftReference<byte[]>(copy));
-            freeLock(pos);
-
+          
         } catch (OutOfMemoryError ex) {
             cache.clear();          
         }
     }
 
-    private void freeLock(long pos) {
+    public void unlock(long pos) {
         Object lock;
         synchronized (locks) {
             lock = locks.get(pos);
