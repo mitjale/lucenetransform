@@ -157,6 +157,7 @@ public class TransformedIndexOutput extends AbstractTransformedIndexOutput {
 
     @Override
     protected void updateFileLength(long pLength) throws IOException {
-        throw new UnsupportedOperationException("Not supported yet.");
+        output.seek(0);
+       output.writeLong(pLength);
     }
 }
