@@ -431,7 +431,7 @@ public class TransformedIndexInput extends IndexInput {
     }
 
     private synchronized void readDecompressImp(final boolean hasDeflatedPosition) throws IOException {
-        bufferPos += bufsize;
+        bufferPos += bufsize;        
         if (hasDeflatedPosition && bufferPos >= length) {
             throw new EOFException("Beyond eof read " + name + " " + bufferPos + ">=" + length);
         }
@@ -628,16 +628,19 @@ public class TransformedIndexInput extends IndexInput {
             }
         }
         int i = findFirstChunk(pos);
-        bufferPos = inflatedPositions[i];
-        chunkPos = i;
-        bufsize = 0;
-        input.seek(chunkPositions[i]);
-        readDecompress();
+        long newBufferPos = inflatedPositions[i];
+        if (newBufferPos!=bufferPos  || bufsize==0) {
+            bufferPos = newBufferPos;
+            chunkPos = i;
+            bufsize = 0;
+            input.seek(chunkPositions[i]);
+            readDecompress();
+        }
         bufferOffset = (int) (pos - bufferPos);
         if (bufferOffset > bufsize) {
             throw new IOException("Incorect compressed directory");
         }
-        assert bufferOffset >= 0 && bufferOffset < bufsize && bufferOffset < endOfFilePosition;
+        assert bufferOffset >= 0 && bufferOffset < bufsize && bufferOffset < length;
     }
 
     @Override
