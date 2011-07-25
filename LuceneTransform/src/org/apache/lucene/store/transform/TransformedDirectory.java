@@ -256,7 +256,7 @@ public class TransformedDirectory extends Directory {
     }
 
     @Override
-    public void setLockFactory(LockFactory lockFactory) {
+    public void setLockFactory(LockFactory lockFactory) throws IOException {
         nested.setLockFactory(lockFactory);
     }
 
