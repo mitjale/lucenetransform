@@ -608,10 +608,13 @@ public class TransformedIndexInput extends IndexInput {
             }
         }
 
-        assert i >= 0 : "Invalid chunk offset table";
-        // overshoot for one on purpose
+        assert i >= 0 : "Invalid chunk offset table";        
+        if (i==inflatedLengths.length && pos>=length) {
+            return inflatedLengths.length-1;
+        }
+        // overshoot for one on purpose        
         if (i >= inflatedLengths.length) {
-            throw new IOException("Incorect compressed directory");
+            throw new IOException("Incorrect chunk directory. Seek pos="+pos+" last chunkPos="+(inflatedPositions[inflatedLengths.length-1]+inflatedLengths[inflatedLengths.length-1])+" length="+length);
         }
         return i;
     }
@@ -638,7 +641,7 @@ public class TransformedIndexInput extends IndexInput {
         }
         bufferOffset = (int) (pos - bufferPos);
         if (bufferOffset > bufsize) {
-            throw new IOException("Incorect compressed directory");
+            throw new IOException("Incorrect chunk directory");
         }
         assert bufferOffset >= 0 && bufferOffset < bufsize && bufferOffset < length;
     }
