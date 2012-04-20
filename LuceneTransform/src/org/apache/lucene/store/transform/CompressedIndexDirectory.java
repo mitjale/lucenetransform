@@ -46,7 +46,7 @@ public class CompressedIndexDirectory extends TransformedDirectory {
     }
 
     public CompressedIndexDirectory(File pDirectory) throws IOException {
-        this(FSDirectory.open(pDirectory));        
+        this(FSDirectory.getDirectory(pDirectory));        
     }
 
 }

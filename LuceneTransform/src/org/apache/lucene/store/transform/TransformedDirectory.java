@@ -14,7 +14,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.lucene.store.transform;
 
 import java.io.IOException;
@@ -65,17 +64,14 @@ public class TransformedDirectory extends Directory {
      *
      */
     private final Directory nested;
-
     /** Temporary directory to store uncompressed files in case of temporary files
      *
      */
     private final Directory tempDirectory;
-
     /** Write chunk size
      * 
      */
     private final int chunkSize;
-
     /** track of open outputs to properly close them (which is very important) on directory close
      * 
      */
@@ -84,27 +80,22 @@ public class TransformedDirectory extends Directory {
      * 
      */
     private final boolean directStore;
-
     /** sequential number for temporary name suffix, in case temporary directory is the same
      * as nested (storage) directory.
      */
     private int seqNum;
-
     /** chunk transformation for writing
      *
      */
     private StoreDataTransformer storeTransformer;
-
     /** chunk transformation for reading. Must be inverse transformation of writing.
      *
      */
     private ReadDataTransformer readTransformer;
-
     /** default chunk cache size
      *
      */
     private int cacheSize = 100;
-
     private static SharedBufferCache memCache = new SharedBufferCache();
 
     /** Create compressed directory, that utilizes direct compression with default parameters.
@@ -113,7 +104,7 @@ public class TransformedDirectory extends Directory {
      * @param storeTransformer transformation for writing chunks
      * @param readTransformer  transformation for reading chunks (inverse of storeTransformer)
      */
-    public TransformedDirectory(final Directory nested,StoreDataTransformer storeTransformer, ReadDataTransformer readTransformer) {
+    public TransformedDirectory(final Directory nested, StoreDataTransformer storeTransformer, ReadDataTransformer readTransformer) {
         this(nested, storeTransformer, readTransformer, true);
     }
 
@@ -150,7 +141,7 @@ public class TransformedDirectory extends Directory {
      * @param readTransformer  transformation used to read data (ex. Inflater)
      * @param directStore if true, direct compression is be used, otherwise temorarry files in directory are used.
      */
-    public TransformedDirectory(final Directory nested, final Directory tempDir, final int chunkSize, StoreDataTransformer storeTransformer, ReadDataTransformer readTransformer,boolean directStore) {
+    public TransformedDirectory(final Directory nested, final Directory tempDir, final int chunkSize, StoreDataTransformer storeTransformer, ReadDataTransformer readTransformer, boolean directStore) {
         this.seqNum = 0;
         this.nested = nested;
         this.chunkSize = chunkSize;
@@ -162,8 +153,8 @@ public class TransformedDirectory extends Directory {
     }
 
     @Override
-    public String[] listAll() throws IOException {
-        return nested.listAll();
+    public String[] list() throws IOException {
+        return nested.list();
     }
 
     @Override
@@ -193,7 +184,7 @@ public class TransformedDirectory extends Directory {
         input.close();
         // information is not correct
         // open and recalculate size
-        if (length==-1) {
+        if (length == -1) {
             IndexInput in = openInput(name);
             length = in.length();
             in.close();
@@ -206,9 +197,9 @@ public class TransformedDirectory extends Directory {
         IndexOutput out = nested.createOutput(name);
         AbstractTransformedIndexOutput output;
         if (directStore) {
-            output = new SequentialTransformedIndexOutput(name, out, chunkSize, (StoreDataTransformer)storeTransformer.copy(), this);
+            output = new SequentialTransformedIndexOutput(name, out, chunkSize, (StoreDataTransformer) storeTransformer.copy(), this);
         } else {
-            output = new TransformedIndexOutput(this, tempDirectory, out, name, chunkSize, (StoreDataTransformer)storeTransformer.copy());
+            output = new TransformedIndexOutput(this, tempDirectory, out, name, chunkSize, (StoreDataTransformer) storeTransformer.copy());
         }
         synchronized (openOutputs) {
             openOutputs.put(name, output);
@@ -218,19 +209,20 @@ public class TransformedDirectory extends Directory {
 
     @Override
     public IndexInput openInput(String name) throws IOException {
-        DecompressionChunkCache cache=null;
-        if (cacheSize>0) {
+        DecompressionChunkCache cache = null;
+        if (cacheSize > 0) {
             cache = new LRUChunkCache(cacheSize);
         }
-        return new TransformedIndexInput(name,nested.openInput(name), (ReadDataTransformer) readTransformer.copy(),cache,memCache);
+        return new TransformedIndexInput(name, nested.openInput(name), (ReadDataTransformer) readTransformer.copy(), cache, memCache);
     }
 
     @Override
     public void close() throws IOException {
         synchronized (openOutputs) {
             Collection<AbstractTransformedIndexOutput> copy = new ArrayList<AbstractTransformedIndexOutput>(openOutputs.values());
-            for (AbstractTransformedIndexOutput out : copy )
+            for (AbstractTransformedIndexOutput out : copy) {
                 out.close();
+            }
         }
         nested.close();
     }
@@ -256,7 +248,7 @@ public class TransformedDirectory extends Directory {
     }
 
     @Override
-    public void setLockFactory(LockFactory lockFactory) throws IOException {
+    public void setLockFactory(LockFactory lockFactory) {
         nested.setLockFactory(lockFactory);
     }
 
@@ -299,5 +291,10 @@ public class TransformedDirectory extends Directory {
 
     public void setCachePageCount(int pCached) {
         cacheSize = pCached;
+    }
+
+    @Override
+    public void renameFile(String from, String to) throws IOException {
+        nested.renameFile(from, to);
     }
 }
