@@ -45,6 +45,7 @@ public class DataEncryptor implements StoreDataTransformer {
     private byte[] iv;
     private Cipher cipher;
     private boolean deepCopy;
+    private SecretKey secret;
 
     public DataEncryptor(String algorithm, String password, byte[] salt, int keyLength, boolean deepCopy) throws GeneralSecurityException {
         this.algorithm = algorithm;
@@ -63,7 +64,7 @@ public class DataEncryptor implements StoreDataTransformer {
         SecretKeyFactory factory = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA1");
         KeySpec spec = new PBEKeySpec(password.toCharArray(), salt, 1024, keyLength);
         SecretKey tmp = factory.generateSecret(spec);
-        SecretKey secret = new SecretKeySpec(tmp.getEncoded(), algorithm.split("/")[0]);
+        secret = new SecretKeySpec(tmp.getEncoded(), algorithm.split("/")[0]);
 
         cipher = Cipher.getInstance(algorithm);
         cipher.init(Cipher.ENCRYPT_MODE, secret);
@@ -92,7 +93,10 @@ public class DataEncryptor implements StoreDataTransformer {
     }
 
     public synchronized int transform(byte[] inBytes, int inOffset, int inLength, byte[] outBytes, int maxOutLength) throws IOException {
-        try {
+        try {       
+            if (iv.length>0) {
+                cipher.init(Cipher.ENCRYPT_MODE, secret, new IvParameterSpec(iv));
+            }
             int cnt = cipher.doFinal(inBytes, inOffset, inLength, outBytes);
             return cnt;
 

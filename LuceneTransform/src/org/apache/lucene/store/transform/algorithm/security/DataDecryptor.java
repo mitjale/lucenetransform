@@ -44,6 +44,7 @@ public class DataDecryptor implements ReadDataTransformer {
     private byte[] iv;
     private Cipher cipher;
     private boolean deepCopy;
+    private SecretKey secret;
 
     public DataDecryptor(String password, byte[] salt, boolean deepCopy) {
         this.password = password;
@@ -56,16 +57,16 @@ public class DataDecryptor implements ReadDataTransformer {
         SecretKeyFactory factory = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA1");
         KeySpec spec = new PBEKeySpec(password.toCharArray(), salt, 1024, keyLength);
         SecretKey tmp = factory.generateSecret(spec);
-        SecretKey secret = new SecretKeySpec(tmp.getEncoded(), algorithm.split("/")[0]);
+        secret = new SecretKeySpec(tmp.getEncoded(), algorithm.split("/")[0]);
         cipher = Cipher.getInstance(algorithm);
         if (iv.length > 0) {
             cipher.init(Cipher.DECRYPT_MODE, secret, new IvParameterSpec(iv));
         } else {
             cipher.init(Cipher.DECRYPT_MODE, secret);
-        }
+        }        
 
     }
-
+    
     public  synchronized void setConfig(byte[] pData) throws IOException {
         IndexInput input = new ByteIndexInput(pData);
         algorithm = input.readString();
@@ -106,6 +107,9 @@ public class DataDecryptor implements ReadDataTransformer {
 
     public synchronized int transform(byte[] inBytes, int inOffset, int inLength, byte[] outBytes, int maxOutLength) throws IOException {
         try {
+              if (iv.length>0) {
+                cipher.init(Cipher.DECRYPT_MODE, secret, new IvParameterSpec(iv));
+            }
             int cnt = cipher.doFinal(inBytes, inOffset, inLength, outBytes);
             return cnt;
 

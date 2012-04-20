@@ -64,7 +64,7 @@ public class TransformTest {
 
     @Before
     public void setUp() throws InterruptedException {
-        delTree(new File("data/test"));
+        delTree(new File("data/test"));        
         //allow OS FS layer to cleanup
 
       //  Thread.sleep(10000);
@@ -133,11 +133,12 @@ public class TransformTest {
         Searcher searcher = new IndexSearcher(reader);
         TopDocs sdocs = searcher.search(new TermQuery(new Term("id", String.valueOf(count / 2))), 10);
         logTime(testInfo, "Single search(ms)", System.currentTimeMillis() - initTime);
-        assertTrue(sdocs.totalHits == 2);
+        assertEquals(2,sdocs.totalHits);            
         initTime = System.currentTimeMillis();
         for (int i = 0; i < searchCount; i++) {
-            TopDocs docs = searcher.search(new TermQuery(new Term("id", String.valueOf(i))), 10);
-            assertTrue(docs.totalHits == 2);
+            int termi = i%count;
+            TopDocs docs = searcher.search(new TermQuery(new Term("id", String.valueOf(termi))), 10);
+            assertEquals(2,docs.totalHits);
             Document doc1 = reader.document(docs.scoreDocs[0].doc);
             Document doc2 = reader.document(docs.scoreDocs[1].doc);
         }

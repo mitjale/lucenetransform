@@ -53,6 +53,7 @@ public class CryptoTest {
         DataEncryptor enc;
         try {
             enc = new DataEncryptor("AES/ECB/PKCS5Padding", password, salt, 128, false);
+            //enc = new DataEncryptor("AES/CBC/PKCS5Padding", password, salt, 128, false);
         } catch (GeneralSecurityException e) {
             throw new RuntimeException(e);
         }
