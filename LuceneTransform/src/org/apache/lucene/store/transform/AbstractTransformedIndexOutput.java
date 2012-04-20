@@ -118,7 +118,7 @@ public abstract class AbstractTransformedIndexOutput extends IndexOutput {
         this.output = output;
         this.deflater = deflater;
         this.compressedDir = compressedDir;
-        this.deflatedBuffer = new byte[0];
+        this.deflatedBuffer = new byte[4096];
         this.chunkDirectory = new ArrayList<DirectoryEntry>();
         this.crc = new CRC32();
 

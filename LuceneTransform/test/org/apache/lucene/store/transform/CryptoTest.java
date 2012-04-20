@@ -12,14 +12,12 @@ import org.apache.lucene.document.Document;
 import org.apache.lucene.document.Field;
 import org.apache.lucene.index.IndexDeletionPolicy;
 import org.apache.lucene.index.IndexWriter;
-import org.apache.lucene.index.IndexWriterConfig;
 import org.apache.lucene.index.KeepOnlyLastCommitDeletionPolicy;
 import org.apache.lucene.index.MergePolicy.OneMerge;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.FSDirectory;
 import org.apache.lucene.store.transform.algorithm.security.DataDecryptor;
 import org.apache.lucene.store.transform.algorithm.security.DataEncryptor;
-import org.apache.lucene.util.Version;
 import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Before;
@@ -49,7 +47,7 @@ public class CryptoTest {
     }
 
     private void openDirectory() throws IOException {
-        Directory directory = FSDirectory.open(new File(path));
+        Directory directory = FSDirectory.getDirectory(new File(path));
         DataEncryptor enc;
         try {
             enc = new DataEncryptor("AES/ECB/PKCS5Padding", password, salt, 128, false);
@@ -85,8 +83,7 @@ public class CryptoTest {
     }
 
     private void randomFill(int cnt) throws IOException {
-        IndexWriterConfig cfg =new IndexWriterConfig(Version.LUCENE_30,new StandardAnalyzer(Version.LUCENE_30));
-        IndexWriter writer = new IndexWriter(encryptedDirectory,cfg);
+        IndexWriter writer = new IndexWriter(encryptedDirectory,new StandardAnalyzer());
         Document doc = new Document();
         Field id = new Field("id", "", Field.Store.YES, Field.Index.ANALYZED);
         Field vals[] = new Field[100];

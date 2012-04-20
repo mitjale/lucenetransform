@@ -30,7 +30,6 @@ import org.apache.lucene.store.transform.algorithm.compress.DeflateDataTransform
 import org.apache.lucene.store.transform.algorithm.compress.InflateDataTransformer;
 import org.apache.lucene.store.transform.algorithm.security.DataDecryptor;
 import org.apache.lucene.store.transform.algorithm.security.DataEncryptor;
-import org.apache.lucene.util.Version;
 import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Before;
@@ -96,7 +95,7 @@ public class TransformTest {
 
     private void TestLucene(Directory dir, int count, String testInfo, File fdir) throws IOException {
         long initTime = System.currentTimeMillis();
-        Analyzer anal = new StandardAnalyzer(Version.LUCENE_30);
+        Analyzer anal = new StandardAnalyzer();
         IndexWriter writer = new IndexWriter(dir, anal, IndexWriter.MaxFieldLength.UNLIMITED);
         //writer.setUseCompoundFile(false);
         logTime(testInfo, "WriterOpen(ms)", System.currentTimeMillis() - initTime);
@@ -157,14 +156,14 @@ public class TransformTest {
     @Test
     public void lucene() throws IOException {
         final File ldir = new File("data/test/lucene");
-        Directory dir = FSDirectory.open(ldir);
+        Directory dir = FSDirectory.getDirectory(ldir);
         TestLucene(dir, count, "lucene", ldir);
     }
 
     @Test
     public void luceneNull() throws IOException {
         final File ldir = new File("data/test/nlucene");
-        Directory dir = FSDirectory.open(ldir);
+        Directory dir = FSDirectory.getDirectory(ldir);
         Directory ndir = new TransformedDirectory(dir, chunkSize, new NullTransformer(), new NullTransformer(), directStore);
         TestLucene(ndir, count, "lucene null", ldir);
     }
@@ -172,7 +171,7 @@ public class TransformTest {
     @Test
     public void compressed() throws IOException {
         final File dir = new File("data/test/clucene");
-        Directory bdir = FSDirectory.open(dir);
+        Directory bdir = FSDirectory.getDirectory(dir);
         //Directory cdir = new CompressedIndexDirectory(bdir);
         Directory cdir = new TransformedDirectory(bdir, chunkSize, new DeflateDataTransformer(), new InflateDataTransformer(), directStore);
         TestLucene(cdir, count, "compressed", dir);
@@ -181,7 +180,7 @@ public class TransformTest {
     @Test
     public void encrypted() throws IOException, GeneralSecurityException {
         final File dir = new File("data/test/elucene");
-        Directory bdir = FSDirectory.open(dir);
+        Directory bdir = FSDirectory.getDirectory(dir);
         byte[] salt = new byte[16];
         String password = "lucenetransform";
         DataEncryptor enc = new DataEncryptor("AES", password, salt, 128, false);
@@ -193,7 +192,7 @@ public class TransformTest {
     @Test
     public void encryptedCBC() throws IOException, GeneralSecurityException {
         final File dir = new File("data/test/eelucene");
-        Directory bdir = FSDirectory.open(dir);
+        Directory bdir = FSDirectory.getDirectory(dir);
         byte[] salt = new byte[16];
         String password = "lucenetransform";
         DataEncryptor enc = new DataEncryptor("AES/CBC/PKCS5Padding", password, salt, 128, false);
@@ -205,7 +204,7 @@ public class TransformTest {
     @Test
     public void compressedEncryptedCBC() throws IOException, GeneralSecurityException {
         final File dir = new File("data/test/celucene");
-        Directory bdir = FSDirectory.open(dir);
+        Directory bdir = FSDirectory.getDirectory(dir);
         byte[] salt = new byte[16];
         String password = "lucenetransform";
         DataEncryptor enc = new DataEncryptor("AES/CBC/PKCS5Padding", password, salt, 128, false);
