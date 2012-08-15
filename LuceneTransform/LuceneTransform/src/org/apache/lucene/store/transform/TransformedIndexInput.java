@@ -1,18 +1,18 @@
 /**
  * Licensed to the Apache Software Foundation (ASF) under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The ASF licenses this file to You under the Apache License, Version 2.0
- * (the "License"); you may not use this file except in compliance with
- * the License.  You may obtain a copy of the License at
+ * contributor license agreements. See the NOTICE file distributed with this
+ * work for additional information regarding copyright ownership. The ASF
+ * licenses this file to You under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+ * License for the specific language governing permissions and limitations under
+ * the License.
  */
 package org.apache.lucene.store.transform;
 
@@ -26,81 +26,100 @@ import java.util.zip.CRC32;
 import org.apache.lucene.store.IndexInput;
 import org.apache.lucene.store.transform.algorithm.ReadDataTransformer;
 
-/** Transparent file read transformation. Since file has log based structure, seek and
- * write are just appended, chunks are merged on read request. Chunk can be overwritten
- * multiple times. Chunks are sorted by position when opening file, to improve seek/read
- * performance. Chunk directory is loaded into memory.
+/**
+ * Transparent file read transformation. Since file has log based structure,
+ * seek and write are just appended, chunks are merged on read request. Chunk
+ * can be overwritten multiple times. Chunks are sorted by position when opening
+ * file, to improve seek/read performance. Chunk directory is loaded into
+ * memory.
  *
  * @author Mitja Lenič
  */
 public class TransformedIndexInput extends IndexInput {
 
-    /** compressed input
+    /**
+     * compressed input
      *
      */
     private IndexInput input;
-    /** length of decompressed file
+    /**
+     * length of decompressed file
      *
      */
     private long length;
-    /** current position in decompressed buffer
+    /**
+     * current position in decompressed buffer
      *
      */
     private long bufferPos;
-    /** chunk position
-     * 
+    /**
+     * chunk position
+     *
      */
     private int chunkPos;
-    /** inflated position of the decompressed buffer
+    /**
+     * inflated position of the decompressed buffer
      *
      */
     private int bufferOffset;
-    /** size of actual data in decompressed buffer. It can be less than
-     * chunk size, because of flushes and seeks.
+    /**
+     * size of actual data in decompressed buffer. It can be less than chunk
+     * size, because of flushes and seeks.
      */
     private int bufsize;
-    /** deflated position of buffer
+    /**
+     * deflated position of buffer
      *
      */
     private long bufferInflatedPos;
-    /** inflater to decompress data
+    /**
+     * inflater to decompress data
      *
      */
     private ReadDataTransformer inflater;
-    /** decompressed data buffer
+    /**
+     * decompressed data buffer
      *
      */
     private SharedBufferCache.SharedBuffer buffer;
-    /** buffer to read compressed data chunks
+    /**
+     * buffer to read compressed data chunks
      *
      */
     private byte[] readBuffer;
-    /** chunk directory: entries of inflated position of chunks
+    /**
+     * chunk directory: entries of inflated position of chunks
      *
      */
     private long[] inflatedPositions;
-    /** chunk directory: entries of position of compressed chunks
+    /**
+     * chunk directory: entries of position of compressed chunks
      *
      */
     private long[] chunkPositions;
-    /** chunk directory: length if inflated data of chunks
+    /**
+     * chunk directory: length if inflated data of chunks
      *
      */
     private int[] inflatedLengths;
-    /** maximum size of inflated chunk, for seek optimizations
+    /**
+     * maximum size of inflated chunk, for seek optimizations
      *
      */
     private int maxInflatedLength;
-    /** actual end of real data position = position of chunk directory
+    /**
+     * actual end of real data position = position of chunk directory
      *
      */
     private long endOfFilePosition;
-    /** for chunk CRC calculation
+    /**
+     * for chunk CRC calculation
      *
      */
     private CRC32 crc;
-    /** true if all chunks are in sequence and there is no need for
-     * chunk scan and overwrite check
+    /**
+     * true if all chunks are in sequence and there is no need for chunk scan
+     * and overwrite check
      */
     private boolean orderedChunks;
     private SharedBufferCache memCache;
@@ -113,6 +132,7 @@ public class TransformedIndexInput extends IndexInput {
     private final Object READ_BUFFER_LOCK = new Object();
 
     public TransformedIndexInput(String pName, IndexInput openInput, ReadDataTransformer inflater, DecompressionChunkCache cache, SharedBufferCache memCache) throws IOException {
+        super(pName);
         this.input = openInput;
         this.crc = new CRC32();
         bufferOffset = 0;
@@ -149,8 +169,9 @@ public class TransformedIndexInput extends IndexInput {
         buildOverwritten();
     }
 
-    /** check for chunks, that potentially overwrite current data and
-     * merge pending write operation into buffer.
+    /**
+     * check for chunks, that potentially overwrite current data and merge
+     * pending write operation into buffer.
      *
      * @param currentPos
      * @throws IOException
@@ -216,7 +237,8 @@ public class TransformedIndexInput extends IndexInput {
         }
     }
 
-    /** read chunk directory
+    /**
+     * read chunk directory
      *
      * @throws IOException
      */
@@ -232,7 +254,7 @@ public class TransformedIndexInput extends IndexInput {
             endOfFilePosition = input.readLong();
             input.seek(endOfFilePosition);
             readDecompressImp(false);
-            IndexInput in = new ByteIndexInput(buffer.data);
+            IndexInput in = new ByteIndexInput(name + ".tmp", buffer.data);
             // if chunk directory is large, buffers are too big, so reset them
             // release buffer and realocate it later
             buffer.data = null;
@@ -270,8 +292,9 @@ public class TransformedIndexInput extends IndexInput {
 //        System.out.println("Index length="+inflatedLengths.length);
     }
 
-    /** sort chunks directory by inflated position to improve seek times
-     * 
+    /**
+     * sort chunks directory by inflated position to improve seek times
+     *
      */
     private void sortChunks() {
         Integer[] sortOrder = new Integer[inflatedPositions.length];
@@ -279,7 +302,6 @@ public class TransformedIndexInput extends IndexInput {
             sortOrder[i] = i;
         }
         Arrays.sort(sortOrder, new Comparator<Integer>() {
-
             public int compare(Integer o1, Integer o2) {
                 long result = inflatedPositions[o1] - inflatedPositions[o2];
                 if (result > 0) {
@@ -312,8 +334,10 @@ public class TransformedIndexInput extends IndexInput {
         inflatedLengths = newInflatedLengths;
     }
 
-    /** rebuilds directory by scanning the file. It tries to
-     * recover not properly closed files without chunk directory
+    /**
+     * rebuilds directory by scanning the file. It tries to recover not properly
+     * closed files without chunk directory
+     *
      * @throws IOException
      */
     private void scanPositions() throws IOException {
@@ -355,19 +379,20 @@ public class TransformedIndexInput extends IndexInput {
         endOfFilePosition = input.length();
     }
 
-    /** find next proper chunk for sequential read. If seek operation followed by write
-     * was made, next chunk is not logically next in the file. This function finds
-     * next consequent chunk for bufferPos and if necessary updates offsets and
-     * buffer position.
+    /**
+     * find next proper chunk for sequential read. If seek operation followed by
+     * write was made, next chunk is not logically next in the file. This
+     * function finds next consequent chunk for bufferPos and if necessary
+     * updates offsets and buffer position.
      *
-     * This situation is not caught by check overwritten, since no overwriting was
-     * made.
+     * This situation is not caught by check overwritten, since no overwriting
+     * was made.
      *
-     * Example chunk layout:
-     *  ([pos=0,len=10], [pos = 4, len = 4], [pos=10,len=15])
+     * Example chunk layout: ([pos=0,len=10], [pos = 4, len = 4],
+     * [pos=10,len=15])
      *
-     * When reading chunk 0, chunk 1 is merged into 0, but chunkPos is 1. On next read
-     * chunk 1 must be skipped and seek to chunk 2 must be executed.
+     * When reading chunk 0, chunk 1 is merged into 0, but chunkPos is 1. On
+     * next read chunk 1 must be skipped and seek to chunk 2 must be executed.
      *
      * @return offset inside decomprsesed buffer that has current bufferPos
      * @throws IOException
@@ -431,7 +456,7 @@ public class TransformedIndexInput extends IndexInput {
     }
 
     private synchronized void readDecompressImp(final boolean hasDeflatedPosition) throws IOException {
-        bufferPos += bufsize;        
+        bufferPos += bufsize;
         if (hasDeflatedPosition && bufferPos >= length) {
             throw new EOFException("Beyond eof read " + name + " " + bufferPos + ">=" + length);
         }
@@ -566,21 +591,14 @@ public class TransformedIndexInput extends IndexInput {
     }
 
     @Override
-    public Object clone() {
-        TransformedIndexInput clone = (TransformedIndexInput) super.clone();
-        clone.input = (IndexInput) input.clone();
-        // increase reference count to buffer, so next time someone changes data, it is duplicated
-        clone.buffer.refCount++;
-        // readBuffer is shared with all clones
-        clone.inflater = (ReadDataTransformer) inflater.copy();
-        return clone;
-    }
-
-    @Override
     public void close() throws IOException {
-        input.close();
-        memCache.release(buffer);
-        input = null;
+        if (input != null) {
+            input.close();
+            memCache.release(buffer);
+            input = null;
+        } else {
+            throw new IOException("Already closed");
+        }
     }
 
     @Override
@@ -608,13 +626,13 @@ public class TransformedIndexInput extends IndexInput {
             }
         }
 
-        assert i >= 0 : "Invalid chunk offset table";        
-        if (i==inflatedLengths.length && pos>=length) {
-            return inflatedLengths.length-1;
+        assert i >= 0 : "Invalid chunk offset table";
+        if (i == inflatedLengths.length && pos >= length) {
+            return inflatedLengths.length - 1;
         }
         // overshoot for one on purpose        
         if (i >= inflatedLengths.length) {
-            throw new IOException("Incorrect chunk directory. Seek pos="+pos+" last chunkPos="+(inflatedPositions[inflatedLengths.length-1]+inflatedLengths[inflatedLengths.length-1])+" length="+length);
+            throw new IOException("Incorrect chunk directory. Seek pos=" + pos + " last chunkPos=" + (inflatedPositions[inflatedLengths.length - 1] + inflatedLengths[inflatedLengths.length - 1]) + " length=" + length);
         }
         return i;
     }
@@ -632,7 +650,7 @@ public class TransformedIndexInput extends IndexInput {
         }
         int i = findFirstChunk(pos);
         long newBufferPos = inflatedPositions[i];
-        if (newBufferPos!=bufferPos  || bufsize==0) {
+        if (newBufferPos != bufferPos || bufsize == 0) {
             bufferPos = newBufferPos;
             chunkPos = i;
             bufsize = 0;
@@ -651,8 +669,9 @@ public class TransformedIndexInput extends IndexInput {
         return length;
     }
 
-    /** find chunks, that overwrite other chunks
-     * 
+    /**
+     * find chunks, that overwrite other chunks
+     *
      */
     private void buildOverwritten() {
         int tov[] = new int[inflatedPositions.length];

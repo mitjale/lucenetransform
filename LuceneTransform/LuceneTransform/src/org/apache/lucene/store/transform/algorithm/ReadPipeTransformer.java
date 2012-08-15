@@ -36,7 +36,7 @@ public class ReadPipeTransformer extends AbstractPipedTransformer implements Rea
     }
 
     public void setConfig(byte[] pData) throws IOException {
-          IndexInput input = new ByteIndexInput(pData);
+          IndexInput input = new ByteIndexInput("config", pData);
           // in different order of course 
           int secondLen = input.readVInt();
           byte[] secondConfig = new byte[secondLen];

@@ -14,11 +14,12 @@ import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.analysis.standard.StandardAnalyzer;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.document.Field;
+import org.apache.lucene.index.DirectoryReader;
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.index.IndexWriter;
+import org.apache.lucene.index.IndexWriterConfig;
 import org.apache.lucene.index.Term;
 import org.apache.lucene.search.IndexSearcher;
-import org.apache.lucene.search.Searcher;
 import org.apache.lucene.search.TermQuery;
 import org.apache.lucene.search.TopDocs;
 import org.apache.lucene.store.Directory;
@@ -96,8 +97,8 @@ public class TransformTest {
 
     private void TestLucene(Directory dir, int count, String testInfo, File fdir) throws IOException {
         long initTime = System.currentTimeMillis();
-        Analyzer anal = new StandardAnalyzer(Version.LUCENE_30);
-        IndexWriter writer = new IndexWriter(dir, anal, IndexWriter.MaxFieldLength.UNLIMITED);
+        Analyzer anal = new StandardAnalyzer(Version.LUCENE_40);
+        IndexWriter writer = new IndexWriter(dir, new IndexWriterConfig(Version.LUCENE_40, anal));
         //writer.setUseCompoundFile(false);
         logTime(testInfo, "WriterOpen(ms)", System.currentTimeMillis() - initTime);
         initTime = System.currentTimeMillis();
@@ -109,8 +110,8 @@ public class TransformTest {
         for (int j = 0; j < 2; j++) {
 
             for (int i = 0; i < count; i++) {
-                id.setValue(String.valueOf(i));
-                content.setValue("Long same words to get better result " + String.valueOf(i));
+                id.setStringValue(String.valueOf(i));
+                content.setStringValue("Long same words to get better result " + String.valueOf(i));
                 writer.addDocument(doc);
 
             }
@@ -120,17 +121,17 @@ public class TransformTest {
         }
         logTime(testInfo, "Indexing(ms)", System.currentTimeMillis() - initTime);
         initTime = System.currentTimeMillis();
-        writer.optimize();
+        writer.forceMerge(1);
         logTime(testInfo, "Optimization(ms)", System.currentTimeMillis() - initTime);
         initTime = System.currentTimeMillis();
         writer.close();
         logTime(testInfo, "Closing(ms)", System.currentTimeMillis() - initTime);
 
         initTime = System.currentTimeMillis();
-        IndexReader reader = IndexReader.open(dir, true);
+        IndexReader reader = DirectoryReader.open(dir);
         logTime(testInfo, "ReaderOpen(ms)", System.currentTimeMillis() - initTime);
         initTime = System.currentTimeMillis();
-        Searcher searcher = new IndexSearcher(reader);
+        IndexSearcher searcher = new IndexSearcher(reader);
         TopDocs sdocs = searcher.search(new TermQuery(new Term("id", String.valueOf(count / 2))), 10);
         logTime(testInfo, "Single search(ms)", System.currentTimeMillis() - initTime);
         assertEquals(2,sdocs.totalHits);            

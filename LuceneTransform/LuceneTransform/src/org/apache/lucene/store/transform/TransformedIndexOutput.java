@@ -18,6 +18,7 @@ package org.apache.lucene.store.transform;
 
 import java.io.IOException;
 import org.apache.lucene.store.Directory;
+import org.apache.lucene.store.IOContext;
 import org.apache.lucene.store.IndexInput;
 import org.apache.lucene.store.IndexOutput;
 import org.apache.lucene.store.transform.algorithm.StoreDataTransformer;
@@ -50,6 +51,10 @@ public class TransformedIndexOutput extends AbstractTransformedIndexOutput {
      * 
      */
     private long closeLength=-1;
+    
+    /** IO context of output
+     */
+    private IOContext ctx;
 
 
     /** creates compressed output.
@@ -63,12 +68,13 @@ public class TransformedIndexOutput extends AbstractTransformedIndexOutput {
      * @param deflateCount number of times to deflate data
      * @throws IOException
      */
-    public TransformedIndexOutput(TransformedDirectory pCompressed, Directory pTempDir, IndexOutput pOut, String pName, int pChunkSize, StoreDataTransformer pTransformer) throws IOException {
+    public TransformedIndexOutput(TransformedDirectory pCompressed, Directory pTempDir, IndexOutput pOut, String pName, int pChunkSize, StoreDataTransformer pTransformer, IOContext ctx) throws IOException {
         super(pName,pOut, pTransformer, pCompressed);
         this.tempDirectory = pTempDir;
+        this.ctx = ctx;
         this.chunkSize = pChunkSize;
         tmpName = pName + ".plain." + pCompressed.nextSequence()+".tmp";
-        tempOut = pTempDir.createOutput(tmpName);
+        tempOut = pTempDir.createOutput(tmpName,ctx);
     }
 
     @Override
@@ -96,7 +102,7 @@ public class TransformedIndexOutput extends AbstractTransformedIndexOutput {
         tempOut.close();
         // directory with offsets offsets of compressed chunks with
         // real position in decompressed stream
-        IndexInput in = tempDirectory.openInput(tmpName);
+        IndexInput in = tempDirectory.openInput(tmpName,ctx);
         long len = closeLength = in.length();
         // write length of the file at the begining for easier retreval 
         output.writeLong(-1);

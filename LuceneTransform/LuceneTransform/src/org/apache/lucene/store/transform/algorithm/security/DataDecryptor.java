@@ -68,7 +68,7 @@ public class DataDecryptor implements ReadDataTransformer {
     }
     
     public  synchronized void setConfig(byte[] pData) throws IOException {
-        IndexInput input = new ByteIndexInput(pData);
+        IndexInput input = new ByteIndexInput("config",pData);
         algorithm = input.readString();
         keyLength = input.readVInt();
         int ivlen = input.readVInt();

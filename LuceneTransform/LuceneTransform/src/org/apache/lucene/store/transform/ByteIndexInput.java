@@ -31,7 +31,8 @@ public class ByteIndexInput extends BufferedIndexInput {
     private byte[] data;
     private int pos;
 
-    public ByteIndexInput(byte[] data) {
+    public ByteIndexInput(String name, byte[] data) {
+        super(name);
         this.data = data;
         pos = 0;
     }

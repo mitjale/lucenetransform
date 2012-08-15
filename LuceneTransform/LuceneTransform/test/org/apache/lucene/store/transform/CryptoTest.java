@@ -86,7 +86,7 @@ public class CryptoTest {
     }
 
     private void randomFill(int cnt) throws IOException {
-        IndexWriterConfig cfg =new IndexWriterConfig(Version.LUCENE_30,new StandardAnalyzer(Version.LUCENE_30));
+        IndexWriterConfig cfg =new IndexWriterConfig(Version.LUCENE_40,new StandardAnalyzer(Version.LUCENE_40));
         IndexWriter writer = new IndexWriter(encryptedDirectory,cfg);
         Document doc = new Document();
         Field id = new Field("id", "", Field.Store.YES, Field.Index.ANALYZED);
@@ -95,15 +95,15 @@ public class CryptoTest {
           vals[j]= new Field("val", "", Field.Store.YES, Field.Index.ANALYZED);
         } 
         for (int i = 0; i<cnt; i++) {
-            id.setValue(String.valueOf(i));;
+            id.setStringValue(String.valueOf(i));;
             for (int j=0;j<vals.length;j++ )  {
-              vals[j].setValue("x"+i+"_"+j);
+              vals[j].setStringValue("x"+i+"_"+j);
             } 
             
             writer.addDocument(doc);
                     
         }
-        writer.optimize();
+        writer.forceMerge(1);
         writer.close();
         
         

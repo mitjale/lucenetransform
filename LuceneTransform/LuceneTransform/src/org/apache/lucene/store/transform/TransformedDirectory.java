@@ -24,6 +24,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.zip.Deflater;
 import org.apache.lucene.store.Directory;
+import org.apache.lucene.store.IOContext;
 import org.apache.lucene.store.IndexInput;
 import org.apache.lucene.store.IndexOutput;
 import org.apache.lucene.store.Lock;
@@ -171,15 +172,7 @@ public class TransformedDirectory extends Directory {
         return nested.fileExists(name);
     }
 
-    @Override
-    public long fileModified(String name) throws IOException {
-        return nested.fileModified(name);
-    }
 
-    @Override
-    public void touchFile(String name) throws IOException {
-        nested.touchFile(name);
-    }
 
     @Override
     public void deleteFile(String name) throws IOException {
@@ -188,13 +181,13 @@ public class TransformedDirectory extends Directory {
 
     @Override
     public long fileLength(String name) throws IOException {
-        IndexInput input = nested.openInput(name, 8);
+        IndexInput input = nested.openInput(name, null);
         long length = input.readLong();
         input.close();
         // information is not correct
         // open and recalculate size
         if (length==-1) {
-            IndexInput in = openInput(name);
+            IndexInput in = openInput(name,null);
             length = in.length();
             in.close();
         }
@@ -202,13 +195,13 @@ public class TransformedDirectory extends Directory {
     }
 
     @Override
-    public IndexOutput createOutput(String name) throws IOException {
-        IndexOutput out = nested.createOutput(name);
+    public IndexOutput createOutput(String name,IOContext ioc) throws IOException {
+        IndexOutput out = nested.createOutput(name,ioc);
         AbstractTransformedIndexOutput output;
         if (directStore) {
             output = new SequentialTransformedIndexOutput(name, out, chunkSize, (StoreDataTransformer)storeTransformer.copy(), this);
         } else {
-            output = new TransformedIndexOutput(this, tempDirectory, out, name, chunkSize, (StoreDataTransformer)storeTransformer.copy());
+            output = new TransformedIndexOutput(this, tempDirectory, out, name, chunkSize, (StoreDataTransformer)storeTransformer.copy(),ioc);
         }
         synchronized (openOutputs) {
             openOutputs.put(name, output);
@@ -217,12 +210,12 @@ public class TransformedDirectory extends Directory {
     }
 
     @Override
-    public IndexInput openInput(String name) throws IOException {
+    public IndexInput openInput(String name,IOContext ioc) throws IOException {
         DecompressionChunkCache cache=null;
         if (cacheSize>0) {
             cache = new LRUChunkCache(cacheSize);
         }
-        return new TransformedIndexInput(name,nested.openInput(name), (ReadDataTransformer) readTransformer.copy(),cache,memCache);
+        return new TransformedIndexInput(name,nested.openInput(name,ioc), (ReadDataTransformer) readTransformer.copy(),cache,memCache);
     }
 
     @Override
@@ -261,18 +254,20 @@ public class TransformedDirectory extends Directory {
     }
 
     @Override
-    public void sync(String name) throws IOException {
+    public void sync(Collection<String>  names) throws IOException {
         /* sync all open outputs. It can result in smaller chunk sizes
          *
          */
         AbstractTransformedIndexOutput output;
         synchronized (openOutputs) {
-            output = openOutputs.get(name);
+            for (String name:names) {
+              output = openOutputs.get(name);
+                if (output != null) {
+                output.sync();
+                }
+            }
         }
-        if (output != null) {
-            output.sync();
-        }
-        nested.sync(name);
+        nested.sync(names);
     }
 
     /** obtain next temporal postfix sequence
@@ -300,4 +295,5 @@ public class TransformedDirectory extends Directory {
     public void setCachePageCount(int pCached) {
         cacheSize = pCached;
     }
+
 }
