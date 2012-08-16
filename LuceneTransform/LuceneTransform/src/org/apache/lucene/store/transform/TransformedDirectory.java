@@ -222,8 +222,9 @@ public class TransformedDirectory extends Directory {
     public void close() throws IOException {
         synchronized (openOutputs) {
             Collection<AbstractTransformedIndexOutput> copy = new ArrayList<AbstractTransformedIndexOutput>(openOutputs.values());
-            for (AbstractTransformedIndexOutput out : copy )
+           for (AbstractTransformedIndexOutput out : copy ) {
                 out.close();
+            }
         }
         nested.close();
     }

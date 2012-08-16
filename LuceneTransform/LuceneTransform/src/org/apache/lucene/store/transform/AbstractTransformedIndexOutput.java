@@ -189,8 +189,7 @@ public abstract class AbstractTransformedIndexOutput extends IndexOutput {
 
     public synchronized void close() throws IOException {
 
-        // flush all chunks
-        flush();
+       
         long directoryPos = length();
         // create chunk directory in separate single compressed chunk
         ByteArrayOutputStream bos = new ByteArrayOutputStream();

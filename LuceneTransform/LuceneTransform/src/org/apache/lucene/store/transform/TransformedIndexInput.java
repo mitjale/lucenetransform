@@ -590,15 +590,23 @@ public class TransformedIndexInput extends IndexInput {
         }
     }
 
+    private Exception closedPath;
+    
     @Override
     public void close() throws IOException {
         if (input != null) {
             input.close();
             memCache.release(buffer);
             input = null;
+            try {
+                throw new Exception();
+            } catch (Exception ex) {
+                closedPath = ex;
+            }
         } else {
-            throw new IOException("Already closed");
+            throw new IOException("Already closed", closedPath);
         }
+        
     }
 
     @Override
@@ -640,7 +648,7 @@ public class TransformedIndexInput extends IndexInput {
     @Override
     public void seek(long pos) throws IOException {
         // check if position is in current buffer
-        // System.out.println("Seek="+pos);
+        System.out.println(name+" Seek="+pos);
         if (pos >= bufferPos) {
             long ioffset = pos - bufferPos;
             if (ioffset < bufsize) {

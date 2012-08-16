@@ -24,6 +24,7 @@ import org.apache.lucene.search.TermQuery;
 import org.apache.lucene.search.TopDocs;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.FSDirectory;
+import org.apache.lucene.store.quorum.QuorumDirectory;
 import org.apache.lucene.store.transform.algorithm.NullTransformer;
 import org.apache.lucene.store.transform.algorithm.ReadPipeTransformer;
 import org.apache.lucene.store.transform.algorithm.StorePipeTransformer;
@@ -49,7 +50,7 @@ public class TransformTest {
     private final int searchCount = 10000;
     private TimeCollector times;
     private int chunkSize = 128 * 1024;
-    private boolean directStore = true;
+    private boolean directStore = !true;
 
     public TransformTest() {
         times = new TimeCollector();
@@ -121,7 +122,7 @@ public class TransformTest {
         }
         logTime(testInfo, "Indexing(ms)", System.currentTimeMillis() - initTime);
         initTime = System.currentTimeMillis();
-        writer.forceMerge(1);
+        writer.forceMerge(1,true);
         logTime(testInfo, "Optimization(ms)", System.currentTimeMillis() - initTime);
         initTime = System.currentTimeMillis();
         writer.close();
@@ -160,7 +161,9 @@ public class TransformTest {
     public void lucene() throws IOException {
         final File ldir = new File("data/test/lucene");
         Directory dir = FSDirectory.open(ldir);
-        TestLucene(dir, count, "lucene", ldir);
+        final File refldir = new File("data/test/lucene-ref");
+        Directory refdir = FSDirectory.open(refldir);
+        TestLucene(new QuorumDirectory(true, dir), count, "lucene", ldir);
     }
 
     @Test
