@@ -23,6 +23,7 @@ import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
 import java.util.zip.CRC32;
+import org.apache.lucene.store.DataInput;
 import org.apache.lucene.store.IndexInput;
 import org.apache.lucene.store.transform.algorithm.ReadDataTransformer;
 
@@ -608,6 +609,17 @@ public class TransformedIndexInput extends IndexInput {
         }
         
     }
+    
+    @Override
+    public DataInput clone() {
+        TransformedIndexInput clone = (TransformedIndexInput) super.clone();
+        clone.input = (IndexInput) input.clone();
+        // increase reference count to buffer, so next time someone changes data, it is duplicated
+        clone.buffer.refCount++;
+        // readBuffer is shared with all clones
+        clone.inflater = (ReadDataTransformer) inflater.copy();
+        return clone;
+    }
 
     @Override
     public long getFilePointer() {
@@ -648,7 +660,7 @@ public class TransformedIndexInput extends IndexInput {
     @Override
     public void seek(long pos) throws IOException {
         // check if position is in current buffer
-        System.out.println(name+" Seek="+pos);
+        //System.out.println(name+" Seek="+pos);
         if (pos >= bufferPos) {
             long ioffset = pos - bufferPos;
             if (ioffset < bufsize) {

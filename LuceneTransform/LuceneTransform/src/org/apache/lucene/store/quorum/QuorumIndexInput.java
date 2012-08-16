@@ -5,6 +5,7 @@
 package org.apache.lucene.store.quorum;
 
 import java.io.IOException;
+import org.apache.lucene.store.DataInput;
 import org.apache.lucene.store.IOContext;
 import org.apache.lucene.store.IndexInput;
 
@@ -14,7 +15,7 @@ import org.apache.lucene.store.IndexInput;
  */
 class QuorumIndexInput extends IndexInput {
 
-    private final IndexInput inputs[];
+    private  IndexInput inputs[];
     private final String name;
     private final IOContext ioc;
     private final boolean checkResult;
@@ -116,4 +117,15 @@ class QuorumIndexInput extends IndexInput {
             inputs[0].readBytes(bytes,i,i1);
         }
     }
+    
+     @Override
+    public DataInput clone() {
+        QuorumIndexInput clone = (QuorumIndexInput) super.clone();
+        clone.inputs = inputs.clone();
+        for (int i = 0; i<inputs.length;i++) {
+            clone.inputs[i] = (IndexInput) inputs[i].clone();
+        }
+        return clone;
+    }
+    
 }
