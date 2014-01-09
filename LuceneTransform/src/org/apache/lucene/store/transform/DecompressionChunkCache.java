@@ -21,35 +21,25 @@ package org.apache.lucene.store.transform;
  * expensive, especially when accessing index directory, this interface provides access to
  * previously read chunks. Each directory file can have its own chunk cache.
  *
- * @author Mitja Lenič
+ * @author Mitja LeniÄ�
  */
 public interface DecompressionChunkCache {
-    /** return plain chunk at file position
-     *
+    /** Returns the chunk for this position, or locks this position
+     * (so other threads making the same request will wait) and returns null.
+     * If this function returns null, you *must* call putChunkAndUnlock().
+     * 
      * @param pos position in plain file
      * @return chunk data, with exact array length or null if chunk is not in the cache
      */
-    byte[] getChunk(long pos);
-    /** lock chunk position for modification. To prevent multiple transformations, position
-     * must be locked when performing transformation.
-     *
-     * @param pos position in plain file
-     */
-    void lock(long pos);
+    byte[] getChunkOrLock(long pos);
 
-    /** unlocks position for reading
-     *
-     * @param pos in plain file
-     */
-    void unlock(long pos);
-    /** store chunk in the cache and release obtained lock. Must copy data into
-     * internal buffer.
-     *
+    /** Stores a chunk (if provided) and unlocks this position.  This position must be locked!
+     * 
      * @param pos plain chunk position
      * @param data data buffer, can be larger than actual chunk size
      * @param pSize actual chunk size.
      */
-    void putChunk(long pos, byte[] data, int pSize);
+    void putChunkAndUnlock(long pos, byte[] data, final int pSize);
 
     /** clear chunk cache
      * 

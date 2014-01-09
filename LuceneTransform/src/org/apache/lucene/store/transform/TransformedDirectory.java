@@ -189,7 +189,9 @@ public class TransformedDirectory extends Directory {
     @Override
     public long fileLength(String name) throws IOException {
         IndexInput input = nested.openInput(name, 8);
-        long length = input.readLong();
+        long length = 0;
+        if (input.length() >= 8) // The input file might be invalid, e.g. from a crash (e.g. Lucene's TestCrash).
+        	length = input.readLong();
         input.close();
         // information is not correct
         // open and recalculate size

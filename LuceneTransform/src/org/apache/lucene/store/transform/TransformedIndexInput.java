@@ -31,7 +31,7 @@ import org.apache.lucene.store.transform.algorithm.ReadDataTransformer;
  * multiple times. Chunks are sorted by position when opening file, to improve seek/read
  * performance. Chunk directory is loaded into memory.
  *
- * @author Mitja Lenič
+ * @author Mitja LeniÄ�
  */
 public class TransformedIndexInput extends IndexInput {
 
@@ -445,9 +445,12 @@ public class TransformedIndexInput extends IndexInput {
         final long currentPos = input.getFilePointer();
         final long cachepos = bufferPos;
         byte[] cacheData = null;
+        boolean cacheLocked = false;
         if (hasDeflatedPosition && cache != null) {
-            cache.lock(cachepos);
-            cacheData = cache.getChunk(cachepos);
+            cacheData = cache.getChunkOrLock(cachepos);
+            if (cacheData == null) {
+            	cacheLocked = true;
+            }
         }
         try {
             if (cacheData != null) {
@@ -517,13 +520,14 @@ public class TransformedIndexInput extends IndexInput {
                         checkOverwriten(currentPos);
                     }
                     if (hasDeflatedPosition && cache != null) {
-                        cache.putChunk(cachepos, buffer.data, bufsize);
+                        cache.putChunkAndUnlock(cachepos, buffer.data, bufsize);
+                        cacheLocked = false;
                     }
                 }
             }
         } finally {
-            if (hasDeflatedPosition && cache != null) {
-                cache.unlock(cachepos);
+            if (cacheLocked) {
+                cache.putChunkAndUnlock(cachepos, null, 0);
             }
         }
         bufferOffset = locBufferOffset;
@@ -578,7 +582,8 @@ public class TransformedIndexInput extends IndexInput {
 
     @Override
     public void close() throws IOException {
-        input.close();
+    	if (input != null) // in case they call close() twice.  (Fixes Lucene's TestTermVectorsReader.testBadParams.)
+    		input.close();
         memCache.release(buffer);
         input = null;
     }
@@ -631,6 +636,8 @@ public class TransformedIndexInput extends IndexInput {
             }
         }
         int i = findFirstChunk(pos);
+        	// TODO:  In the case where the caller seeks to the end of the file,
+        	// would it be faster to not decompress the last chunk?
         long newBufferPos = inflatedPositions[i];
         if (newBufferPos!=bufferPos  || bufsize==0) {
             bufferPos = newBufferPos;
@@ -643,7 +650,10 @@ public class TransformedIndexInput extends IndexInput {
         if (bufferOffset > bufsize) {
             throw new IOException("Incorrect chunk directory");
         }
-        assert bufferOffset >= 0 && bufferOffset < bufsize && bufferOffset < length;
+        //assert bufferOffset >= 0 && bufferOffset < bufsize && bufferOffset < length;
+        assert bufferOffset >= 0;
+        assert bufferOffset <= bufsize; // (Changed to <= to fix TestFieldsReader.testLoadSize.)
+        assert bufsize <= length;
     }
 
     @Override
