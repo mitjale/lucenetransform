@@ -9,11 +9,31 @@ public class SharedBufferCache {
     public static class SharedBuffer {
 
         byte[] data;
-        volatile int refCount;
+        private volatile int refCount;
 
         private SharedBuffer(int size) {
             data = new byte[size];
             refCount = 1;
+        }
+        
+        synchronized void incRefCount() {
+        	++refCount;
+        }
+
+        /** Decreases the reference count if it's > 1.
+         *  Call this function to release your claim on this buffer if someone else is using it
+         *  or hold onto the buffer if it's not shared.
+         * @return true if the buffer was shared (i.e. refCount > 1 before calling this function)
+         */
+        synchronized boolean decRefCountIfShared() {
+        	if (refCount <= 0) {
+        		throw new IllegalStateException();
+        	}
+        	if (refCount == 1) {
+        		return false;
+        	}
+        	--refCount;
+        	return true;
         }
 
         public String toString(int bufSize) {
@@ -50,28 +70,28 @@ public class SharedBufferCache {
         return new SharedBuffer(size);
     }
 
+    /** Call this function to release your hold on the buffer (regardless of whether it's shared). */
     synchronized void release(SharedBuffer buffer) {
-        buffer.refCount--;
-        if (buffer.refCount == 0) {
-            buffer.refCount = 1;
-            int minPos = 0;
-            int minSize = Integer.MAX_VALUE;
-            for (int i = 0; i < buffers.length; i++) {
-                if (buffers[i] == null) {
-                    buffers[i] = buffer;
-                    return;
-                } else {
-                    final int size = buffers[i].data.length;
-                    if (minSize > size) {
-                        minSize = size;
-                        minPos = i;
-                    }
+    	if (buffer.decRefCountIfShared()) {
+    		return;
+    	}
+        int minPos = 0;
+        int minSize = Integer.MAX_VALUE;
+        for (int i = 0; i < buffers.length; i++) {
+            if (buffers[i] == null) {
+                buffers[i] = buffer;
+                return;
+            } else {
+                final int size = buffers[i].data.length;
+                if (minSize > size) {
+                    minSize = size;
+                    minPos = i;
                 }
             }
-            // replace if this is bigger buffer
-            if (buffer.data.length>minSize) {
-                buffers[minPos] = buffer;                
-            }
+        }
+        // replace if this is bigger buffer
+        if (buffer.data.length>minSize) {
+            buffers[minPos] = buffer;                
         }
     }
 }

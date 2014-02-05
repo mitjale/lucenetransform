@@ -224,7 +224,15 @@ public class TransformedDirectory extends Directory {
         if (cacheSize>0) {
             cache = new LRUChunkCache(cacheSize);
         }
-        return new TransformedIndexInput(name,nested.openInput(name), (ReadDataTransformer) readTransformer.copy(),cache,memCache);
+        return new TransformedIndexInput(nested.toString() + "- " + name,nested.openInput(name), (ReadDataTransformer) readTransformer.copy(),cache,memCache);
+        /* There is a reproducible failure in TestIndexWriterCommit.testPrepareCommitRollback()
+         * (any seed) from the command line, but not Eclipse.
+         * It can't open segments_2 after a rollback, because FSDirectory.deleteFile()
+         * and File.delete() fail silently.  (A preceding call to deleteFile() also fails silently.)
+         * java.nio.file.Files.delete() says another process has the file handle open.
+         * I have no idea how another process could have a handle open to a file in a temp dir my code creates,
+         * but I can't see how this is a problem with my code.
+         */
     }
 
     @Override

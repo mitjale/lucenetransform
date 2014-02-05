@@ -43,7 +43,7 @@ public class TransformedIndexInput extends IndexInput {
      *
      */
     private long length;
-    /** current position in decompressed buffer
+    /** the inflated position of the start of buffer
      *
      */
     private long bufferPos;
@@ -62,7 +62,7 @@ public class TransformedIndexInput extends IndexInput {
     /** deflated position of buffer
      *
      */
-    private long bufferInflatedPos;
+    private long bufferDeflatedPos;
     /** inflater to decompress data
      *
      */
@@ -95,7 +95,7 @@ public class TransformedIndexInput extends IndexInput {
      *
      */
     private long endOfFilePosition;
-    /** for chunk CRC calculation
+    /** for chunk CRC calculation.  This is a member just so we don't reallocate it all the time.
      *
      */
     private CRC32 crc;
@@ -121,7 +121,7 @@ public class TransformedIndexInput extends IndexInput {
         this.name = pName;
         bufsize = 0;
         this.cache = cache;
-        bufferInflatedPos = -1;
+        bufferDeflatedPos = -1;
         this.inflater = inflater;
         buffer = memCache.newBuffer(8192);
         readBuffer = new byte[8192];
@@ -455,8 +455,7 @@ public class TransformedIndexInput extends IndexInput {
         try {
             if (cacheData != null) {
                 bufsize = cacheData.length;
-                if (buffer.refCount > 1) {
-                    buffer.refCount--;
+                if (buffer.decRefCountIfShared()) {
                     buffer = memCache.newBuffer(maxChunkSize);
                 } else if (bufsize > buffer.data.length) {
                     buffer.data = new byte[maxChunkSize];
@@ -478,8 +477,7 @@ public class TransformedIndexInput extends IndexInput {
                 final int compressed = input.readVInt();
                 bufsize = input.readVInt();
                 //  System.out.println("Decompressing " + input + " at " + input.getFilePointer()+" size="+bufsize);
-                if (buffer.refCount > 1) {
-                    buffer.refCount--;
+                if (buffer.decRefCountIfShared()) {
                     buffer = memCache.newBuffer(maxChunkSize);
                 }
                 if (!hasDeflatedPosition && bufsize > buffer.data.length) {
@@ -487,10 +485,10 @@ public class TransformedIndexInput extends IndexInput {
                 }
                 //System.out.println("Reading "+name+" cp="+currentPos+" dp="+bufferPos+" len="+bufsize);
                 // we are at current position ie. buffer allready contains data
-                if (bufferInflatedPos == currentPos) {
+                if (bufferDeflatedPos == currentPos) {
                     input.seek(input.getFilePointer() + compressed);
                 } else {
-                    bufferInflatedPos = currentPos;
+                    bufferDeflatedPos = currentPos;
                     //           System.out.println("Decompress at " + currentPos + " " + cache);
                     int lcnt;
                     synchronized (READ_BUFFER_LOCK) {
@@ -513,6 +511,16 @@ public class TransformedIndexInput extends IndexInput {
                         crc.reset();
                         crc.update(buffer.data, 0, bufsize);
                         if (crc.getValue() != chunkCRC) {
+                        	// I think I found a javax.crypto bug that can cause this when using encryption.
+                        	// I reproduce it through Lucene's unit tests through the command line (not Eclipse)
+                        	// "ant test -Dtests.directory=org.apache.lucene.store.transform.TransformedDirectoryLuceneTestWrapper
+                        	//  -lib=<dir>/trunk/LuceneTransform/build/test/classes  -lib=<dir>/trunk/LuceneTransform/build/classes"
+                        	// It shows up around half the time.
+                        	// I traced it back to calls in DataDecryptor.copy().  After initCipher(),
+                        	// dec.secret.getEncoding() will occasionally (rarely) be all 0s, although
+                        	// this.secret.getEncoding() is non-zero.
+                        	// A solution is perhaps to create the secret object in a for loop, checking
+                        	// for this condition, and with a max # tries.
                             throw new IOException("CRC mismatch");
                         }
                     }
@@ -531,7 +539,7 @@ public class TransformedIndexInput extends IndexInput {
             }
         }
         bufferOffset = locBufferOffset;
-        bufferInflatedPos = currentPos;
+        bufferDeflatedPos = currentPos;
         chunkPos++;
     }
 
@@ -571,12 +579,20 @@ public class TransformedIndexInput extends IndexInput {
 
     @Override
     public Object clone() {
+        // increase reference count to buffer, so we don't have to realloc the buffer
+        // and if someone reads from the clone, they can get bytes from the buffer
+    	// It's good practice to increment a ref count before adding the reference.
+    	// If cloning fails, we won't actually have an extra reference.
+    	// Because of the way this class uses buffer, it's fine -- not worth cleaning up.
+    	buffer.incRefCount();
         TransformedIndexInput clone = (TransformedIndexInput) super.clone();
         clone.input = (IndexInput) input.clone();
-        // increase reference count to buffer, so next time someone changes data, it is duplicated
-        clone.buffer.refCount++;
-        // readBuffer is shared with all clones
+        // readBuffer and READ_BUFFER_LOCK are shared with all clones.
+        // TODO: Make it not shared?  I don't think this gains much and
+        // it's possible that clones will reallocate readBuffer.
+        // (Maybe reallocate READ_BUFFER_LOCK or lock on readBuffer itself.)
         clone.inflater = (ReadDataTransformer) inflater.copy();
+        clone.crc = new CRC32();
         return clone;
     }
 
