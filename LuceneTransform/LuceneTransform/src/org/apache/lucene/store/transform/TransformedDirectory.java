@@ -195,13 +195,13 @@ public class TransformedDirectory extends Directory {
     }
 
     @Override
-    public IndexOutput createOutput(String name,IOContext ioc) throws IOException {
+    public IndexOutput createOutput(String name,IOContext ioc) throws IOException {       
         IndexOutput out = nested.createOutput(name,ioc);
         AbstractTransformedIndexOutput output;
         if (directStore) {
             output = new SequentialTransformedIndexOutput(name, out, chunkSize, (StoreDataTransformer)storeTransformer.copy(), this);
         } else {
-            output = new TransformedIndexOutput(this, tempDirectory, out, name, chunkSize, (StoreDataTransformer)storeTransformer.copy(),ioc);
+            throw new UnsupportedOperationException();
         }
         synchronized (openOutputs) {
             openOutputs.put(name, output);

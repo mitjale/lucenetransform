@@ -19,6 +19,8 @@ class QuorumIndexInput extends IndexInput {
     private final String name;
     private final IOContext ioc;
     private final boolean checkResult;
+    private long offset;
+    private long maxLen = -1;
 
     public QuorumIndexInput(boolean checkResult, IndexInput[] inputs, String name, IOContext ioc) {
         super(name);
@@ -34,7 +36,7 @@ class QuorumIndexInput extends IndexInput {
             input.close();
         }
     }
-
+    
     @Override
     public long getFilePointer() {
         if (checkResult) {
@@ -47,21 +49,24 @@ class QuorumIndexInput extends IndexInput {
                 result = lr;
 
             }
-            return result;
+            return result-offset;
         } else {
-            return inputs[0].getFilePointer();
+            return inputs[0].getFilePointer()-offset;
         }
     }
 
     @Override
     public void seek(long l) throws IOException {
         for (IndexInput input : inputs) {
-            input.seek(l);
+            input.seek(l+offset);
         }
     }
 
     @Override
     public long length() {
+        if (maxLen>=0) {
+            return maxLen;
+        }
         if (checkResult) {
             Long result = null;
             for (IndexInput input : inputs) {
@@ -119,13 +124,22 @@ class QuorumIndexInput extends IndexInput {
     }
     
      @Override
-    public DataInput clone() {
+    public IndexInput clone() {
         QuorumIndexInput clone = (QuorumIndexInput) super.clone();
         clone.inputs = inputs.clone();
         for (int i = 0; i<inputs.length;i++) {
             clone.inputs[i] = (IndexInput) inputs[i].clone();
         }
         return clone;
+    }
+
+    @Override
+    public IndexInput slice(String string, long l, long l1) throws IOException {
+        QuorumIndexInput slice = (QuorumIndexInput) this.clone();
+        slice.offset = l;
+        slice.maxLen = l1;
+        slice.seek(0);
+        return slice;
     }
     
 }

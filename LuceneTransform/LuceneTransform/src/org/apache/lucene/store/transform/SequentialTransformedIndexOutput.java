@@ -70,9 +70,9 @@ public class SequentialTransformedIndexOutput extends AbstractTransformedIndexOu
         bufferOffset = 0;
         bufferPosition = 0;
         buffer = new byte[pCunkSize];
-        // by writting -1 we alocate enough space for any length, since 
+        // by writting magic number we alocate enough space for any length, since 
         // length is known and written when file is closed
-        output.writeLong(-1);
+        output.writeLong(MAGIC_NUMBER);
         // write configuration
         writeConfig();
     }
@@ -82,12 +82,14 @@ public class SequentialTransformedIndexOutput extends AbstractTransformedIndexOu
         if (bufferOffset >= buffer.length) {
             flushBuffer();
         }
+              globalCRC.update(b);
         buffer[bufferOffset++] = b;
     }
 
 
     @Override
     public synchronized void writeBytes(byte[] b, int offset, int length) throws IOException {
+          globalCRC.update(b, offset, length);
         if (length<buffer.length-bufferOffset) {
             System.arraycopy(b, offset, buffer, bufferOffset, length);
             bufferOffset+=length;
@@ -132,8 +134,6 @@ public class SequentialTransformedIndexOutput extends AbstractTransformedIndexOu
     public synchronized  void close() throws IOException {
         // on close length information is written at the begininig of file
         flush();
-        long pos = output.getFilePointer();
-        output.seek(pos);
         // actually close file and write chunk directory
         super.close();
     }
@@ -149,48 +149,8 @@ public class SequentialTransformedIndexOutput extends AbstractTransformedIndexOu
         return bufferPosition+bufferOffset;
     }
 
-    /** Simulates seek in sequential file. It doesn't really seeks, but writes new chunk with position specified by seek.
-     * When reading chunks are scanned for possible overwrite and combine to obtain
-     * final file. You should use this method as few times as possible, since it is not
-     * space efficient and reduces read performance.
-     *
-     * @param pos seek position
-     * @throws IOException
-     */
-    @Override
-    public void seek(long pos) throws IOException {
-        // if it is possible to seek in current buffer - not whole one,
-        // but only written one
-        if (pos>=bufferPosition && (pos<bufferPosition+bufferOffset ||pos <bufferPosition+maxBufferOffset)) {
-            if (bufferOffset>maxBufferOffset) {
-                maxBufferOffset = bufferOffset;
-            }
-            bufferOffset = (int)(pos-bufferPosition);
-       //     System.out.println("Seek "+name+" in buffer "+pos+ " bp="+bufferPosition+" off="+bufferOffset);
-            return;
-        }
-        if (pos != getFilePointer()) {
-            flushBuffer();
-            // seeking beynod EOF (not so good)
-            if (pos>length && pos>getFilePointer()) {
-                System.out.println("Warning seek beyond eof "+name+" " +pos+">"+(getFilePointer()));               
-            }
-            // length is maximum position. Position can be reduced only by seeks.
-            if (getFilePointer()> length) {
-                length = getFilePointer();
-            }
-            bufferPosition = pos;
-          //  System.out.println("Seek "+name+" out buffer "+pos+ " bp="+bufferPosition+" off="+bufferOffset);
-        }
-    }
-
     @Override
     public long length() throws IOException {
-        // if no seek operation is used, then length of the file is position,
-        // if seek is used, then position is not necesary length (maximum position)
-        if (length > getFilePointer()) {
-            return length;
-        }
         return getFilePointer();
     }
 
@@ -199,9 +159,4 @@ public class SequentialTransformedIndexOutput extends AbstractTransformedIndexOu
         flush();
     }
 
-    @Override
-    protected void updateFileLength(long pLength) throws IOException {
-        output.seek(0);
-        output.writeLong(pLength);
-    }
-}
+ }

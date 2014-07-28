@@ -22,6 +22,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.zip.CRC32;
 import org.apache.lucene.store.IndexOutput;
+import org.apache.lucene.store.OutputStreamIndexOutput;
 import org.apache.lucene.store.transform.algorithm.StoreDataTransformer;
 
 /** Abstract base class for writting compressed chunk file.
@@ -30,7 +31,13 @@ import org.apache.lucene.store.transform.algorithm.StoreDataTransformer;
  */
 public abstract class AbstractTransformedIndexOutput extends IndexOutput {
 
+    protected CRC32 globalCRC = new CRC32();
 
+    public static final long MAGIC_NUMBER=38483828l;
+    @Override
+    public long getChecksum() throws IOException {
+        return globalCRC.getValue();
+    }
 
     /** used to store compressed chunk directory information. This information
      * is used to find (and merge) information about possible chunk overwrites,
@@ -190,10 +197,10 @@ public abstract class AbstractTransformedIndexOutput extends IndexOutput {
     public synchronized void close() throws IOException {
 
        
-        long directoryPos = length();
+        long fileLength = getFilePointer();
         // create chunk directory in separate single compressed chunk
         ByteArrayOutputStream bos = new ByteArrayOutputStream();
-        IndexOutput boutput = new StreamIndexOutput(bos);
+        IndexOutput boutput = new OutputStreamIndexOutput(bos,100);
 
         // write number of chunk entries
         boutput.writeVInt(chunkDirectory.size());
@@ -214,9 +221,10 @@ public abstract class AbstractTransformedIndexOutput extends IndexOutput {
 
         // write chunk directory postion at end of the file
         output.writeLong(entryPos);
+        // write original file size at the end
+        output.writeLong(MAGIC_NUMBER);
+        output.writeLong(fileLength);
         output.flush();
-        updateFileLength(directoryPos);
-        output.close();
         compressedDir.release(name);
 
 
@@ -229,9 +237,4 @@ public abstract class AbstractTransformedIndexOutput extends IndexOutput {
     public abstract void sync() throws IOException;
 
 
-    /** write length of file on the begining of file to indicate successfull close and that directory has been
-     * successfully written
-     * @param pLength actual length of file
-     */
-    protected abstract void updateFileLength(long pLength) throws IOException;
-}
+   }

@@ -28,7 +28,7 @@ import javax.crypto.spec.IvParameterSpec;
 import javax.crypto.spec.PBEKeySpec;
 import javax.crypto.spec.SecretKeySpec;
 import org.apache.lucene.store.IndexOutput;
-import org.apache.lucene.store.transform.StreamIndexOutput;
+import org.apache.lucene.store.OutputStreamIndexOutput;
 import org.apache.lucene.store.transform.algorithm.DataTransformer;
 import org.apache.lucene.store.transform.algorithm.StoreDataTransformer;
 
@@ -108,7 +108,7 @@ public class DataEncryptor implements StoreDataTransformer {
 
     public byte[] getConfig() throws IOException {
         ByteArrayOutputStream bos = new ByteArrayOutputStream();
-        IndexOutput out = new StreamIndexOutput(bos);
+        IndexOutput out = new OutputStreamIndexOutput(bos,100);
         out.writeString(algorithm);
         out.writeVInt(keyLength);
         out.writeVInt(iv.length);

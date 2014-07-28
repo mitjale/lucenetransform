@@ -98,8 +98,8 @@ public class TransformTest {
 
     private void TestLucene(Directory dir, int count, String testInfo, File fdir) throws IOException {
         long initTime = System.currentTimeMillis();
-        Analyzer anal = new StandardAnalyzer(Version.LUCENE_40);
-        IndexWriter writer = new IndexWriter(dir, new IndexWriterConfig(Version.LUCENE_40, anal));
+        Analyzer anal = new StandardAnalyzer(Version.LUCENE_4_9);
+        IndexWriter writer = new IndexWriter(dir, new IndexWriterConfig(Version.LUCENE_4_9, anal));
         //writer.setUseCompoundFile(false);
         logTime(testInfo, "WriterOpen(ms)", System.currentTimeMillis() - initTime);
         initTime = System.currentTimeMillis();

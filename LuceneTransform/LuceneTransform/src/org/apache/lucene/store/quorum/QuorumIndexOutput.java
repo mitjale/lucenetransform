@@ -6,6 +6,7 @@ package org.apache.lucene.store.quorum;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.zip.CRC32;
 import org.apache.lucene.store.IOContext;
 import org.apache.lucene.store.IndexOutput;
 
@@ -19,6 +20,7 @@ class QuorumIndexOutput extends IndexOutput {
     private final String name;
     private final IOContext ioc;
     private final boolean checkResult;
+    private CRC32 crc = new CRC32();
     
     public QuorumIndexOutput(boolean checkResult, IndexOutput[] outputs, String name, IOContext ioc) {
         this.outputs = outputs;
@@ -59,12 +61,7 @@ class QuorumIndexOutput extends IndexOutput {
         }
     }
 
-    @Override
-    public void seek(long l) throws IOException {
-        for (IndexOutput output : outputs) {
-            output.seek(l);
-        }
-    }
+    
 
     @Override
     public long length() throws IOException {
@@ -88,6 +85,7 @@ class QuorumIndexOutput extends IndexOutput {
     public void writeByte(byte b) throws IOException {
           for (IndexOutput output : outputs) {
             output.writeByte(b);
+            crc.update(b);
         }
   }
 
@@ -95,7 +93,13 @@ class QuorumIndexOutput extends IndexOutput {
     public void writeBytes(byte[] bytes, int i, int i1) throws IOException {
           for (IndexOutput output : outputs) {
             output.writeBytes(bytes,i,i1);
+            crc.update(bytes,i,i1);
         }
+    }
+
+    @Override
+    public long getChecksum() throws IOException {
+        return crc.getValue();
     }
     
 }

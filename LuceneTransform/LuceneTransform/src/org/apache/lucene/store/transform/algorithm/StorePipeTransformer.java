@@ -20,7 +20,7 @@ package org.apache.lucene.store.transform.algorithm;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import org.apache.lucene.store.IndexOutput;
-import org.apache.lucene.store.transform.StreamIndexOutput;
+import org.apache.lucene.store.OutputStreamIndexOutput;
 
 /** Combines configuration of two piped transformation.
  *
@@ -38,7 +38,7 @@ public class StorePipeTransformer extends AbstractPipedTransformer implements St
 
     public byte[] getConfig() throws IOException {
         ByteArrayOutputStream bos = new ByteArrayOutputStream();
-        IndexOutput out = new StreamIndexOutput(bos);
+        IndexOutput out = new OutputStreamIndexOutput(bos,100);
         byte[] configFirst = ((StoreDataTransformer)first).getConfig();
         byte[] configSecond = ((StoreDataTransformer)second).getConfig();
         out.writeVInt(configFirst.length);
