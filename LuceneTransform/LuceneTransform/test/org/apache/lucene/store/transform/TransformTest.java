@@ -50,7 +50,7 @@ public class TransformTest {
     private final int searchCount = 10000;
     private TimeCollector times;
     private int chunkSize = 128 * 1024;
-    private boolean directStore = !true;
+    private boolean directStore = true;
 
     public TransformTest() {
         times = new TimeCollector();
