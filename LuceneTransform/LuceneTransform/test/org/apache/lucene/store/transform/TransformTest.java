@@ -163,7 +163,7 @@ public class TransformTest {
         Directory dir = FSDirectory.open(ldir);
         final File refldir = new File("data/test/lucene-ref");
         Directory refdir = FSDirectory.open(refldir);
-        TestLucene(new QuorumDirectory(true, dir), count, "lucene", ldir);
+        TestLucene(dir, count, "lucene", ldir);
     }
 
     @Test

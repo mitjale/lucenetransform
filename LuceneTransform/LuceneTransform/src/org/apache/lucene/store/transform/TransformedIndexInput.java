@@ -519,7 +519,7 @@ public class TransformedIndexInput extends IndexInput {
     private int findFirstChunk(long pos) throws IOException {
         // find chunk index from indlated positions
         int i = 0;
-        if (inflatedPositions.length < 100 && maxInflatedLength > 0) {
+        if (inflatedPositions.length < 10 && maxInflatedLength > 0) {
             while (i < inflatedPositions.length && !((inflatedPositions[i] <= pos) && (inflatedPositions[i] + inflatedLengths[i] > pos))) {
                 i++;
             }

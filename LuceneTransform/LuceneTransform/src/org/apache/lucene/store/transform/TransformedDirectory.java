@@ -199,7 +199,7 @@ public class TransformedDirectory extends Directory {
         IndexOutput out = nested.createOutput(name,ioc);
         AbstractTransformedIndexOutput output;
         if (directStore) {
-            output = new SequentialTransformedIndexOutput(name, out, chunkSize, (StoreDataTransformer)storeTransformer.copy(), this);
+            output = new TransformedIndexOutput(name, out, chunkSize, (StoreDataTransformer)storeTransformer.copy(), this);
         } else {
             throw new UnsupportedOperationException();
         }
