@@ -181,6 +181,9 @@ public class TransformedDirectory extends Directory {
 
     @Override
     public long fileLength(String name) throws IOException {
+        if (nested.fileLength(name)==0) {
+            return 0;
+        }
         IndexInput input = nested.openInput(name, null);
         long length = input.readLong();
         input.close();
