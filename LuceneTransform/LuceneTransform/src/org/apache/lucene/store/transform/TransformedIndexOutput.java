@@ -82,14 +82,12 @@ public class TransformedIndexOutput extends AbstractTransformedIndexOutput {
         if (bufferOffset >= buffer.length) {
             flushBuffer();
         }
-              globalCRC.update(b);
         buffer[bufferOffset++] = b;
     }
 
 
     @Override
     public synchronized void writeBytes(byte[] b, int offset, int length) throws IOException {
-          globalCRC.update(b, offset, length);
         if (length<buffer.length-bufferOffset) {
             System.arraycopy(b, offset, buffer, bufferOffset, length);
             bufferOffset+=length;

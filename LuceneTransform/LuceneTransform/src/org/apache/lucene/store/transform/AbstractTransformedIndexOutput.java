@@ -36,6 +36,7 @@ public abstract class AbstractTransformedIndexOutput extends IndexOutput {
     public static final long MAGIC_NUMBER=38483828l;
     @Override
     public long getChecksum() throws IOException {
+        flush();
         return globalCRC.getValue();
     }
 
@@ -156,6 +157,9 @@ public abstract class AbstractTransformedIndexOutput extends IndexOutput {
     }
 
     private synchronized void writeChunkImp(byte[] pData, int pSize) throws IOException {
+
+        
+        globalCRC.update(pData, 0, pSize);
 
         // deflate original data
         if (deflatedBuffer.length < pData.length * 2) {
